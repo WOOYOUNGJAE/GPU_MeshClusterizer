@@ -1,4 +1,4 @@
-#include "lbvh.cuh"
+#include "gmcCuda/lbvh.cuh"
 #include <random>
 #include <vector>
 #include <thrust/random.h>

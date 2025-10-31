@@ -1,9 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <CudaCompile Include="kernel.cu" />
-  </ItemGroup>
-  <ItemGroup>
     <Filter Include="lbvh">
       <UniqueIdentifier>{af0cf76c-b186-4a16-89dc-8f4bc6224396}</UniqueIdentifier>
     </Filter>
@@ -27,5 +24,6 @@
     <ClInclude Include="lbvh\utility.cuh">
       <Filter>lbvh</Filter>
     </ClInclude>
+    <ClInclude Include="..\Includes\gmcDefines.h" />
   </ItemGroup>
 </Project>
