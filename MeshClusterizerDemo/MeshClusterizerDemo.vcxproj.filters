@@ -1,14 +1,13 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="lbvh">
-      <UniqueIdentifier>{e7e65bc0-c35f-4a8b-b222-8b41f0870df5}</UniqueIdentifier>
-    </Filter>
-  </ItemGroup>
-  <ItemGroup>
     <CudaCompile Include="main.cu" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Source.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="gltfLoader.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="gltfLoader.h" />
   </ItemGroup>
 </Project>
