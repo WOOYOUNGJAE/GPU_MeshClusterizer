@@ -7,6 +7,11 @@
 
 namespace gmcCuda
 {
+	// 
+	/**
+	 * Only a subset of functions and kernels are exposed to the Importer.
+	 * The actual implementation is in the "Impl" class.
+	 */
 	class GMC_DLL ClusterBuilder
 	{
 	public:
@@ -21,7 +26,7 @@ namespace gmcCuda
 
 	private:
 		class Impl;
-		Impl* pImple = nullptr; // PIMPL
+		Impl* pImpl = nullptr; // PIMPL
 	};
 	
 }

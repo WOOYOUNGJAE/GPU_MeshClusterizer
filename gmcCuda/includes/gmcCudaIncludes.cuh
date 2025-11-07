@@ -14,6 +14,7 @@
 #include <stdlib.h>
 
 #include <cudaHelper.cuh>
+#include <vec_math.h>
 
 
 // Thrust

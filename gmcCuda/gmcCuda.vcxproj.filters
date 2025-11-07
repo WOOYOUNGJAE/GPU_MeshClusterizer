@@ -21,7 +21,13 @@
     <ClInclude Include="includes\cudaHelper.cuh">
       <Filter>private</Filter>
     </ClInclude>
-    <ClInclude Include="includes\clusterbuilder.cuh">
+    <ClInclude Include="includes\clusterBuilder.cuh">
+      <Filter>private</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\vec_math.h">
+      <Filter>private</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\Preprocessor.h">
       <Filter>private</Filter>
     </ClInclude>
   </ItemGroup>

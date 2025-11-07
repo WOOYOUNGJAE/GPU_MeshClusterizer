@@ -96,10 +96,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h" />
-    <ClInclude Include="includes\clusterbuilder.cuh" />
+    <ClInclude Include="includes\clusterBuilder.cuh" />
     <ClInclude Include="includes\cudaHelper.cuh" />
     <ClInclude Include="includes\gmcCudaIncludes.cuh" />
     <ClInclude Include="includes\lbvh.cuh" />
+    <ClInclude Include="includes\Preprocessor.h" />
+    <ClInclude Include="includes\vec_math.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="temp.cpp" />

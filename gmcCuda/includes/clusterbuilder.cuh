@@ -2,8 +2,24 @@
 #include <gmcCudaIncludes.cuh>
 #include <gmcCuda/gmcCuda.h>
 
+
 namespace gmcCuda
 {
+	__global__ void Calculate_Mortons(uint32_t numTriangles, float3* vertices, uint3* triangles, float3* outCentroids)
+	{
+		const int triangleIndex = blockDim.x * blockIdx.x + threadIdx.x;
+
+		if (triangleIndex < numTriangles)
+		{
+			uint3 triangle = triangles[triangleIndex];
+			float3 v0 = vertices[triangle.x];
+			float3 v1 = vertices[triangle.y];
+			float3 v2 = vertices[triangle.z];
+
+			float3 pos = (1.f / 3.f) * (v0 + v1 + v2);
+		}
+	}
+
 	class Geometry
 	{
 	public:
@@ -20,7 +36,7 @@ namespace gmcCuda
 			m_hPositionsViewer = thrust::host_vector<float3>(m_dPositions);
 			m_hTrianglesViewer = thrust::host_vector<uint3>(m_dTriangles);
 
-
+			cudaDeviceSynchronize();
 		}
 		~Geometry()
 		{
