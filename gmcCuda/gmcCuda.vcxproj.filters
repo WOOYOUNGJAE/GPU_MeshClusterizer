@@ -18,6 +18,12 @@
     <ClInclude Include="includes\gmcCudaIncludes.cuh">
       <Filter>private</Filter>
     </ClInclude>
+    <ClInclude Include="includes\cudaHelper.cuh">
+      <Filter>private</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\clusterbuilder.cuh">
+      <Filter>private</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="src\gmcCuda.cu">

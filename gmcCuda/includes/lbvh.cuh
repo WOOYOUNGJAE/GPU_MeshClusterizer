@@ -1,18 +1,17 @@
 #pragma once
-
 #include <gmcCudaIncludes.cuh>
-// Jerry Hsu, 2024
+// class LBVH is from Jerry Hsu, 2024
 
 
 namespace gmcCuda {
+
 	/// <summary>
 	/// Very simple high-performance GPU LBVH that takes in a list of bounding boxes and outputs overlapping pairs.
 	/// Side note: null bounds (inf, -inf) as inputs are ignored automatically.
 	/// </summary>
 	class LBVH {
 	public:
-		typedef Bound<3, float> aabb;
-		typedef glm::vec3 vec_type;
+		typedef Bound aabb;
 
 		// 64 byte node struct. Can fit two in a 128 byte cache line.
 		struct alignas(64) node {
@@ -64,7 +63,7 @@ namespace gmcCuda {
 		/// <param name="resSize">The number of entries allocated</param>
 		/// <param name="other">The other BVH</param>
 		/// <returns>The number of unique collision pairs written</returns>
-		size_t query(ivec2* d_res, size_t resSize, LBVH* other) const;
+		size_t query(uint2* d_res, size_t resSize, LBVH* other) const;
 
 		/// <summary>
 		/// Tests this BVH against itself. Outputs unique collision pairs.
@@ -72,7 +71,7 @@ namespace gmcCuda {
 		/// <param name="d_res">Device pointer with unique object ID pairs</param>
 		/// <param name="resSize">The number of entries allocated</param>
 		/// <returns>The number of unique collision pairs written</returns>
-		size_t query(ivec2* d_res, size_t resSize) const;
+		size_t query(uint2* d_res, size_t resSize) const;
 
 		// Does a self check of the BVH structure for debugging purposes.
 		void bvhSelfCheck() const;

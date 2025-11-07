@@ -52,7 +52,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;WIN64;GMC_EXPORTS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;%(Include);$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(Include);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -74,7 +74,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;WIN64;GMC_EXPORTS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;%(Include);$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(Include);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -96,6 +96,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h" />
+    <ClInclude Include="includes\clusterbuilder.cuh" />
+    <ClInclude Include="includes\cudaHelper.cuh" />
     <ClInclude Include="includes\gmcCudaIncludes.cuh" />
     <ClInclude Include="includes\lbvh.cuh" />
   </ItemGroup>

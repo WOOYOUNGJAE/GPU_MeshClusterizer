@@ -8,11 +8,8 @@ int main(int argc, char* argv[])
 
 	uint32_t numPositions = gltfLoader.m_vPositions.size();
 
-
-	gmcCuda::BuildClusters(gltfLoader.m_vPositions, gltfLoader.m_indices);
-	//gmcCuda::BuildClusters((float*)gltfLoader.m_vPositions.data(), numPositions, (unsigned int*)gltfLoader.m_indices.data(), gltfLoader.m_indices.size());
-	//lbvh::bvh<float, float4, aabb_getter> bvh(f4Positions.begin(), f4Positions.end(), true);
-
+	gmcCuda::ClusterBuilder clusterBuilder;
+	clusterBuilder.Init_WithDeviceAllocation((float*)gltfLoader.m_vPositions.data(), numPositions, gltfLoader.m_indices.data(), gltfLoader.m_indices.size());
 
 	return 0;
 }
