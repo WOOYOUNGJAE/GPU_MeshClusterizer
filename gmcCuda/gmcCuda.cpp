@@ -1,2 +1,0 @@
-#include <gmcCuda/gmcCuda.h>
-

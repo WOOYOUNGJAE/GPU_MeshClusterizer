@@ -32,7 +32,12 @@ void GltfLoader::LoadFromFile(std::string filename)
 		const tinygltf::Node tinygltfNode = tinygltfModel.nodes[scene.nodes[i]];
 		LoadNode(nullptr, tinygltfNode, scene.nodes[i], tinygltfModel, m_indices, m_vertices);
 	}
-
+	uint32_t numVertices = m_vertices.size();
+	m_vPositions.resize(numVertices);
+	for (uint32_t i = 0; i < numVertices; ++i)
+	{
+		memcpy(&m_vPositions[i], &m_vertices[i].pos, sizeof(glm::vec3));
+	}
 }
 
 void GltfLoader::LoadNode(Node* pParent, const tinygltf::Node& tinygltfNode, uint32_t nodeIndex,

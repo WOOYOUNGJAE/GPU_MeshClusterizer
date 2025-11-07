@@ -10,4 +10,9 @@
   <ItemGroup>
     <ClInclude Include="gltfLoader.h" />
   </ItemGroup>
+  <ItemGroup>
+    <Filter Include="cuda">
+      <UniqueIdentifier>{9b6aa3f1-3614-4d1e-b210-22b725a50552}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
 </Project>

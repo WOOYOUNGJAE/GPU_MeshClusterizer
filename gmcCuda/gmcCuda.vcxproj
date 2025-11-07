@@ -52,19 +52,19 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;WIN64;GMC_EXPORTS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;%(Include);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;%(Include);$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ImportLibrary>$(SolutionDir)lib\$(Platform)\$(Configuration)\$(TargetName).lib</ImportLibrary>
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
-      <AdditionalOptions>--extended-lambda %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>--std=c++17 --extended-lambda %(AdditionalOptions)</AdditionalOptions>
       <Defines>GMC_EXPORTS</Defines>
-      <Include>
-      </Include>
+      <Include>$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(Include)</Include>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -74,7 +74,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;WIN64;GMC_EXPORTS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;%(Include);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;%(Include);$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -82,28 +82,25 @@
       <OptimizeReferences>true</OptimizeReferences>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ImportLibrary>$(SolutionDir)lib\$(Platform)\$(Configuration)\$(TargetName).lib</ImportLibrary>
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
-      <AdditionalOptions>--extended-lambda %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>--std=c++17 --extended-lambda %(AdditionalOptions)</AdditionalOptions>
       <Defines>GMC_EXPORTS</Defines>
-      <Include>
-      </Include>
+      <Include>$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(Include)</Include>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h" />
-    <ClInclude Include="..\Includes\gmcCuda\lbvh.cuh" />
-    <ClInclude Include="..\Includes\gmcCuda\lbvh\aabb.cuh" />
-    <ClInclude Include="..\Includes\gmcCuda\lbvh\bvh.cuh" />
-    <ClInclude Include="..\Includes\gmcCuda\lbvh\morton_code.cuh" />
-    <ClInclude Include="..\Includes\gmcCuda\lbvh\predicator.cuh" />
-    <ClInclude Include="..\Includes\gmcCuda\lbvh\query.cuh" />
-    <ClInclude Include="..\Includes\gmcCuda\lbvh\utility.cuh" />
-    <ClInclude Include="..\Includes\gmcDefines.h" />
+    <CudaCompile Include="src\gmcCuda.cu" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="gmcCuda.cpp" />
+    <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h" />
+    <ClInclude Include="includes\gmcCudaIncludes.cuh" />
+    <ClInclude Include="includes\lbvh.cuh" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="temp.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
