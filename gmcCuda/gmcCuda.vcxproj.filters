@@ -7,6 +7,9 @@
     <Filter Include="private">
       <UniqueIdentifier>{7d07260b-704a-438a-a2f9-b5809480f75f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="private\nvUtils">
+      <UniqueIdentifier>{822b5776-6a01-4e67-b58a-ce6060f7c918}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h">
@@ -24,15 +27,24 @@
     <ClInclude Include="includes\clusterBuilder.cuh">
       <Filter>private</Filter>
     </ClInclude>
-    <ClInclude Include="includes\vec_math.h">
-      <Filter>private</Filter>
+    <ClInclude Include="includes\nvUtils\nvUtils.h">
+      <Filter>private\nvUtils</Filter>
     </ClInclude>
-    <ClInclude Include="includes\Preprocessor.h">
-      <Filter>private</Filter>
+    <ClInclude Include="includes\nvUtils\Preprocessor.h">
+      <Filter>private\nvUtils</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\nvUtils\vec_math.h">
+      <Filter>private\nvUtils</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\nvUtils\Matrix.h">
+      <Filter>private\nvUtils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="src\gmcCuda.cu">
+      <Filter>private</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\lbvh.cu">
       <Filter>private</Filter>
     </CudaCompile>
   </ItemGroup>

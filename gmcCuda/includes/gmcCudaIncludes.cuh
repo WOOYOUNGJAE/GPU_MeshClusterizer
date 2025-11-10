@@ -1,7 +1,7 @@
 #pragma once
 /**
  * Include only for .cu, No .cpp
- * Most codes like struct Bound are from KittenGpuLBVH(https://github.com/jerry060599/KittenGpuLBVH)
+ * struct AABBare from KittenGpuLBVH(https://github.com/jerry060599/KittenGpuLBVH)'s Bound 
  */
 
 #include <cuda_runtime.h>
@@ -171,28 +171,28 @@ namespace gmcCuda {
 		return xx * 4 + yy * 2 + zz;
 	}
 
-	struct Bound {
+	struct AABB {
 		float3 min;
 		float3 max;
 
 		__host__ __device__
-			Bound()
+			AABB()
 			: min(make_float3(INFINITY, INFINITY, INFINITY)),
 			max(make_float3(-INFINITY, -INFINITY, -INFINITY)) {
 		}
 
 		__host__ __device__
-			Bound(const float3& center)
+			AABB(const float3& center)
 			: min(center), max(center) {
 		}
 
 		__host__ __device__
-			Bound(const float3& min_, const float3& max_)
+			AABB(const float3& min_, const float3& max_)
 			: min(min_), max(max_) {
 		}
 
 		__host__ __device__
-			Bound(const Bound& b)
+			AABB(const AABB& b)
 			: min(b.min), max(b.max) {
 		}
 
@@ -206,7 +206,7 @@ namespace gmcCuda {
 		}
 
 		__host__ __device__
-			void absorb(const Bound& b) {
+			void absorb(const AABB& b) {
 			min.x = fminf(min.x, b.min.x); min.y = fminf(min.y, b.min.y); min.z = fminf(min.z, b.min.z);
 			max.x = fmaxf(max.x, b.max.x); max.y = fmaxf(max.y, b.max.y); max.z = fmaxf(max.z, b.max.z);
 		}
@@ -225,12 +225,12 @@ namespace gmcCuda {
 		}
 
 		__host__ __device__
-			bool contains(const Bound& b) const {
+			bool contains(const AABB& b) const {
 			return contains(b.min) && contains(b.max);
 		}
 
 		__host__ __device__
-			bool intersects(const Bound& b) const {
+			bool intersects(const AABB& b) const {
 			return !(max.x < b.min.x || min.x > b.max.x ||
 				max.y < b.min.y || min.y > b.max.y ||
 				max.z < b.min.z || min.z > b.max.z);

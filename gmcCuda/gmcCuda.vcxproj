@@ -52,7 +52,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;WIN64;GMC_EXPORTS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(Include);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;$(SolutionDir)External\glm\;$(ProjectDir)includes\;$(ProjectDir)includes\nvUtils\;%(Include);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -64,7 +64,7 @@
       <TargetMachinePlatform>64</TargetMachinePlatform>
       <AdditionalOptions>--std=c++17 --extended-lambda %(AdditionalOptions)</AdditionalOptions>
       <Defines>GMC_EXPORTS</Defines>
-      <Include>$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(Include)</Include>
+      <Include>$(SolutionDir)External\glm\;$(ProjectDir)includes\;$(ProjectDir)includes\nvUtils\;%(Include)</Include>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -74,7 +74,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;WIN64;GMC_EXPORTS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(Include);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Includes\;$(SolutionDir)External\glm\;$(ProjectDir)includes\;$(ProjectDir)includes\nvUtils\;%(Include);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -88,11 +88,15 @@
       <TargetMachinePlatform>64</TargetMachinePlatform>
       <AdditionalOptions>--std=c++17 --extended-lambda %(AdditionalOptions)</AdditionalOptions>
       <Defines>GMC_EXPORTS</Defines>
-      <Include>$(SolutionDir)External\glm\;$(ProjectDir)includes\;%(Include)</Include>
+      <Include>$(SolutionDir)External\glm\;$(ProjectDir)includes\;$(ProjectDir)includes\nvUtils\;%(Include)</Include>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <CudaCompile Include="src\gmcCuda.cu" />
+    <CudaCompile Include="src\lbvh.cu">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </CudaCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h" />
@@ -100,8 +104,10 @@
     <ClInclude Include="includes\cudaHelper.cuh" />
     <ClInclude Include="includes\gmcCudaIncludes.cuh" />
     <ClInclude Include="includes\lbvh.cuh" />
-    <ClInclude Include="includes\Preprocessor.h" />
-    <ClInclude Include="includes\vec_math.h" />
+    <ClInclude Include="includes\nvUtils\Matrix.h" />
+    <ClInclude Include="includes\nvUtils\nvUtils.h" />
+    <ClInclude Include="includes\nvUtils\Preprocessor.h" />
+    <ClInclude Include="includes\nvUtils\vec_math.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="temp.cpp" />

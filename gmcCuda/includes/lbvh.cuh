@@ -11,7 +11,7 @@ namespace gmcCuda {
 	/// </summary>
 	class LBVH {
 	public:
-		typedef Bound aabb;
+		typedef AABB aabb;
 
 		// 64 byte node struct. Can fit two in a 128 byte cache line.
 		struct alignas(64) node {

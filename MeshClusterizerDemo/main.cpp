@@ -10,6 +10,6 @@ int main(int argc, char* argv[])
 
 	gmcCuda::ClusterBuilder clusterBuilder;
 	clusterBuilder.Init_WithDeviceAllocation((float*)gltfLoader.m_vPositions.data(), numPositions, gltfLoader.m_indices.data(), gltfLoader.m_indices.size());
-
+	clusterBuilder.BuildClusters();
 	return 0;
 }

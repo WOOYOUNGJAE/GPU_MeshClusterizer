@@ -31,3 +31,5 @@
         cudaDeviceSynchronize();                                                  \
         CUDA_CHECK_LAST_ERROR();                                                  \
     } while (0)
+
+#define ROUND_UP_DIM(N, S) ((((N) + (S) - 1) / (S)))

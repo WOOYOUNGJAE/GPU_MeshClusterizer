@@ -16,7 +16,7 @@
 
 #include <unordered_set>
 
-namespace Kitten {
+namespace gmcCuda {
 
 	struct LBVH::thrustImpl {
 		thrust::device_ptr<aabb> d_objs = nullptr;
@@ -37,7 +37,7 @@ namespace Kitten {
 			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
 			if (tid >= size) return;
 			vec3 coord = wholeAABB.normCoord(aabbs[tid].center()) * 1024.f;
-			codes[tid] = Kitten::getMorton(clamp(ivec3(coord), ivec3(0), ivec3(1023)));
+			codes[tid] = gmcCuda::getMorton(clamp(ivec3(coord), ivec3(0), ivec3(1023)));
 			ids[tid] = tid;
 		}
 
@@ -317,7 +317,7 @@ namespace Kitten {
 #pragma endregion
 #pragma region LBVH
 	LBVH::LBVH() : impl(std::make_unique<thrustImpl>()) {}
-	Kitten::LBVH::~LBVH() = default;
+	gmcCuda::LBVH::~LBVH() = default;
 
 	LBVH::aabb LBVH::bounds() {
 		return rootBounds;
@@ -422,20 +422,20 @@ namespace Kitten {
 #pragma endregion
 #pragma region testing
 
-	void testAABBMatch(Kitten::Bound<3, float> a, Kitten::Bound<3, float> b, int idx) {
+	void testAABBMatch(gmcCuda::Bound<3, float> a, gmcCuda::Bound<3, float> b, int idx) {
 		// Check if they match
 		if (length2(a.min - b.min) > 1e-7f || length2(a.max - b.max) > 1e-7f) {
 			printf("Error: AABB mismatch node %d\n", idx);
 			printf("Expected:\n");
-			Kitten::print(a.min);
-			Kitten::print(a.max);
+			gmcCuda::print(a.min);
+			gmcCuda::print(a.max);
 			printf("Found:\n");
-			Kitten::print(b.min);
-			Kitten::print(b.max);
+			gmcCuda::print(b.min);
+			gmcCuda::print(b.max);
 		}
 	}
 
-	Kitten::Bound<3, float> lbvhCheckAABBMerge(
+	gmcCuda::Bound<3, float> lbvhCheckAABBMerge(
 		thrust::host_vector<LBVH::node>& nodes,
 		uint32_t idx) {
 		auto node = nodes[idx];
@@ -550,16 +550,16 @@ namespace Kitten {
 		const float R = 0.001f;
 
 		printf("Generating Data...\n");
-		vector<Kitten::Bound<3, float>> points(N);
+		vector<gmcCuda::Bound<3, float>> points(N);
 
 		srand(1);
 		for (size_t i = 0; i < N; i++) {
-			Kitten::Bound<3, float> b(vec3(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX));
+			gmcCuda::Bound<3, float> b(vec3(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX));
 			b.pad(R);
 			points[i] = b;
 		}
 
-		thrust::device_vector<Kitten::Bound<3, float>> d_points(points.begin(), points.end());
+		thrust::device_vector<gmcCuda::Bound<3, float>> d_points(points.begin(), points.end());
 		thrust::device_vector<ivec2> d_res(100 * N);
 		cudaDeviceSynchronize();
 

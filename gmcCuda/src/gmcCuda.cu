@@ -16,14 +16,10 @@ gmcCuda::ClusterBuilder::~ClusterBuilder()
 void gmcCuda::ClusterBuilder::Init_WithDeviceAllocation(float* positions, uint32_t numPositions, uint32_t* indices, uint32_t numIndices)
 {
 	pImpl->Init(positions, numPositions, indices, numIndices);
-	//pImple->pGeometry.
-	//gmcCuda::Geometry
 }
 
 void gmcCuda::ClusterBuilder::BuildClusters()
 {
-	// calc triangle's centroid
-	
-	//pImple->pGeometry
+	pImpl->BuildClusters();
 }
 
