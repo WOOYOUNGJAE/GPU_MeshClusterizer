@@ -2,7 +2,8 @@
 #include <gmcCudaIncludes.cuh>
 #include <gmcCuda/gmcCuda.h>
 
-#include "lbvh.cuh"
+#include <lbvh.cuh>
+#include <unordered_set>
 
 
 namespace gmcCuda
@@ -38,8 +39,16 @@ namespace gmcCuda
 
 		if (triangleIndex < numTriangles)
 		{
-			float3 centroid = Calculate_Morton(triangleIndex, numTriangles, vertices, triangles);
-			outAABBs[triangleIndex] = AABB(centroid);
+			//float3 centroid = Calculate_Morton(triangleIndex, numTriangles, vertices, triangles);
+			uint3 triangle = triangles[triangleIndex];
+			float3 v0 = vertices[triangle.x];
+			float3 v1 = vertices[triangle.y];
+			float3 v2 = vertices[triangle.z];
+
+			float3 triMin = MinFloat3(v0, v1, v2);
+			float3 triMax = MaxFloat3(v0, v1, v2);
+
+			outAABBs[triangleIndex] = AABB(triMin, triMax);
 		}
 	}
 
@@ -119,13 +128,43 @@ namespace gmcCuda
 		{
 			uint32_t numTriangles = pGeometry->m_numTriangles;
 			thrust::device_vector<uint2> d_res(100 * numTriangles);
-			cudaDeviceSynchronize();
+			CUDA_SYNC_CHECK();
 
 			// Build BVH
-			//LBVH bvh;
-			//printf("Building LBVH...\n");
-			////bvh.compute(thrust::raw_pointer_cast(pGeometry->m_dAABBs.data()), numTriangles);
-			//cudaDeviceSynchronize();
+			LBVH bvh;
+			printf("Building LBVH...\n");
+			bvh.compute(thrust::raw_pointer_cast(pGeometry->m_dAABBs.data()), numTriangles);
+			CUDA_SYNC_CHECK();
+
+			// Query BVH
+			printf("Querying LBVH...\n");
+			int numCols = bvh.query(thrust::raw_pointer_cast(d_res.data()), d_res.size());
+			CUDA_SYNC_CHECK();
+
+			// Print results
+			printf("Getting results...\n");
+			thrust::host_vector<uint2> res(d_res.begin(), d_res.begin() + numCols);
+
+			printf("%d collision pairs found on GPU.\n", res.size());
+			// printf("GPU:\n");
+			// for (size_t i = 0; i < res.size(); i++)
+			// 	printf("%d %d\n", res[i].x, res[i].y);
+
+			// Brute force compute the same result
+			std::unordered_set<uint2> resSet;
+			bool good = true;
+
+			for (size_t i = 0; i < res.size(); i++) {
+				uint2 a = res[i];
+				if (a.x > a.y) std::swap(a.x, a.y);
+				if (!resSet.insert(a).second) {
+					printf("Error: Duplicate result\n");
+					good = false;
+				}
+			}
+
+			int numCPUFound = 0;
+			printf("\nRunning brute force CPU collision detection...\n");
 		}
 	public:
 

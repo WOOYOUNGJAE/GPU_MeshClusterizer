@@ -1,6 +1,6 @@
 #pragma once
 #include <gmcCudaIncludes.cuh>
-// class LBVH is from Jerry Hsu, 2024
+// Base of class LBVH is from Jerry Hsu, 2024(https://github.com/jerry060599/KittenGpuLBVH/blob/main/lbvh.cuh)
 
 
 namespace gmcCuda {
@@ -18,7 +18,8 @@ namespace gmcCuda {
 			uint32_t parentIdx;			// Parent node. Most siginificant bit (MSB) is used to indicate whether this is a left or right child of said parent.
 			uint32_t leftIdx;			// Index of left child node. MSB is used to indicate whether this is a leaf node.
 			uint32_t rightIdx;			// Index of right child node. MSB is used to indicate whether this is a leaf node.
-			uint32_t fence;				// This subtree have indices between fence and current index.
+			//uint32_t fence;				// This subtree have indices between fence and current index.
+			uint32_t range_fence;		// first 16bits for range, other 16bits for fence.
 
 			aabb bounds[2];
 		};

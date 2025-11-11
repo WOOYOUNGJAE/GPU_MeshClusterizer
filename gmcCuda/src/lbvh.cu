@@ -1,4 +1,4 @@
-#include "lbvh.cuh"
+#include <lbvh.cuh>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -16,6 +16,9 @@
 
 #include <unordered_set>
 
+#include "gmcMacros.h"
+
+
 namespace gmcCuda {
 
 	struct LBVH::thrustImpl {
@@ -31,13 +34,21 @@ namespace gmcCuda {
 #pragma region LBVHDevice
 
 	namespace LBVHKernels {
+
+
 		// Computes the morton codes for each AABB
-		template<typename T>
-		__global__ void mortonKernel(Bound<3, T>* aabbs, uint32_t* codes, uint32_t* ids, Bound<3, T> wholeAABB, int size) {
+		/**
+		 * @param ids : threadGlobalID(TriID)
+		 * @param size : num Triangles
+		 */
+		__global__ void mortonKernel(AABB* aabbs, uint32_t* codes, uint32_t* ids, AABB wholeAABB, int size)
+		{
 			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
 			if (tid >= size) return;
-			vec3 coord = wholeAABB.normCoord(aabbs[tid].center()) * 1024.f;
-			codes[tid] = gmcCuda::getMorton(clamp(ivec3(coord), ivec3(0), ivec3(1023)));
+			// normlize center with AABB's min,max. And * 1024
+			float3 coord = wholeAABB.normCoord(aabbs[tid].center()) * 1024.f;
+			uint3 uiCoord = make_uint3(coord);
+			codes[tid] = getMorton(clamp(uiCoord, make_uint3(0), make_uint3(1023)));
 			ids[tid] = tid;
 		}
 
@@ -51,12 +62,12 @@ namespace gmcCuda {
 			return ((uint64_t)code << 32ul) | (uint64_t)idx;
 		}
 
-		__device__ inline ivec2 determineRange(uint32_t const* mortonCodes,
+		__device__ inline uint2 determineRange(uint32_t const* mortonCodes,
 			const uint32_t numObjs, uint32_t idx) {
 
 			// This is the root node
 			if (idx == 0)
-				return ivec2(0, numObjs - 1);
+				return make_uint2(0, numObjs - 1);
 
 			// Determine direction of the range
 			const uint64_t selfCode = mergeIdx(mortonCodes[idx], idx);
@@ -86,7 +97,7 @@ namespace gmcCuda {
 
 			unsigned int jdx = idx + l * d;
 			if (d < 0) thrust::swap(idx, jdx); // Make sure that idx < jdx
-			return ivec2(idx, jdx);
+			return make_uint2(idx, jdx);
 		}
 
 		__device__ inline uint32_t findSplit(uint32_t const* mortonCodes,
@@ -117,9 +128,11 @@ namespace gmcCuda {
 			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
 			if (tid >= numObjs - 1) return;
 
-			ivec2 range = determineRange(mortonCodes, numObjs, tid);
-			nodes[tid].fence = (tid == range.x) ? range.y : range.x;
+			// determine node's own range
+			uint2 range = determineRange(mortonCodes, numObjs, tid);
 
+			//nodes[tid].fence = (tid == range.x) ? range.y : range.x;
+			STORE_UINT16_IN_UINT32(nodes[tid].range_fence, false, (tid == range.x) ? range.y : range.x);
 			const int gamma = findSplit(mortonCodes, range.x, range.y);
 
 			// Left and right children are neighbors to the split point
@@ -146,9 +159,9 @@ namespace gmcCuda {
 			nodes[tid].rightIdx = range.y;
 		}
 
-		// Refits the AABBs of the internal nodes
+			// Refits the AABBs of the internal nodes
 		__global__ void mergeUpKernel(LBVH::node* nodes,
-			uint32_t* leafParents, Bound<3, float>* aabbs, uint32_t* objIDs, int* flags, int numObjs) {
+			uint32_t* leafParents, AABB* aabbs, uint32_t* objIDs, int* flags, int numObjs) {
 
 			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
 			if (tid >= numObjs) return;
@@ -157,7 +170,7 @@ namespace gmcCuda {
 			// Assuming full exploration and always pushing the left child first.
 			int depth = 1;
 
-			Bound<3, float> last = aabbs[objIDs[tid]];
+			AABB last = aabbs[objIDs[tid]];
 			int parent = leafParents[tid];
 
 			while (true) {
@@ -170,9 +183,9 @@ namespace gmcCuda {
 				if (!otherDepth) return;
 
 				if (isRight)
-					depth = glm::max(depth + 1, otherDepth);
+					depth = max(depth + 1, otherDepth);
 				else
-					depth = glm::max(depth, otherDepth + 1);
+					depth = max(depth, otherDepth + 1);
 
 				// Ensure memory coherency before we read.
 				__threadfence();
@@ -193,21 +206,21 @@ namespace gmcCuda {
 		// Query the LBVH for overlapping objects
 		// Overcomplicated because of shared memory buffering
 		template<bool IGNORE_SELF, int STACK_SIZE>
-		__global__ void lbvhQueryKernel(ivec2* res, int* resCounter, int maxRes,
+		__global__ void lbvhQueryKernel(uint2* res, int* resCounter, int maxRes,
 			const LBVH::node* nodes, const uint32_t* objIDs,
-			const uint32_t* queryIDs, const Bound<3, float>* queryAABBs, const int numQueries) {
+			const uint32_t* queryIDs, const AABB* queryAABBs, const int numQueries) {
 
 			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
 			bool active = tid < numQueries;
 
-			Bound<3, float> queryAABB;
+			AABB queryAABB;
 			int objIdx;
 			if (active) {
 				objIdx = queryIDs[tid];
 				queryAABB = queryAABBs[objIdx];
 			}
 
-			__shared__ ivec2 sharedRes[MAX_RES_PER_BLOCK];
+			__shared__ uint2 sharedRes[MAX_RES_PER_BLOCK];
 			__shared__ int sharedCounter;		// How many results are cached in shared memory
 			__shared__ int sharedGlobalIdx;		// Where to write in global memory
 			if (threadIdx.x == 0)
@@ -237,14 +250,15 @@ namespace gmcCuda {
 								*(stackPtr++) = nodeIdx | 0x80000000;
 								break;
 							}
-							sharedRes[sIdx] = ivec2(objIDs[nodeIdx], objIdx);
+							sharedRes[sIdx] = make_uint2(objIDs[nodeIdx], objIdx);
 						}
 						else {
 							auto node = nodes[nodeIdx];
 
 							// Ignore duplicate and self intersections
 							if (IGNORE_SELF)
-								if (glm::max(nodeIdx, node.fence) <= tid) continue;
+								//if (max(nodeIdx, node.fence) <= tid) continue;
+								if (max(nodeIdx, LOAD_UINT16_FROM_UINT32(node.range_fence, false)) <= tid) continue;
 
 							// Internal node
 							if (node.bounds[0].intersects(queryAABB))
@@ -257,7 +271,7 @@ namespace gmcCuda {
 
 				// Flush whatever we have
 				__syncthreads();
-				int totalRes = glm::min(sharedCounter, MAX_RES_PER_BLOCK);
+				int totalRes = min(sharedCounter, MAX_RES_PER_BLOCK);
 
 				if (threadIdx.x == 0)
 					sharedGlobalIdx = atomicAdd(resCounter, totalRes);
@@ -297,9 +311,9 @@ namespace gmcCuda {
 		// We are primarily limited by the number of registers, so we always call the kernel with just enough stack space.
 		// This gives another ~15% performance boost for queries.
 		template<bool IGNORE_SELF>
-		void launchQueryKernel(ivec2* res, int* resCounter, int maxRes,
+		void launchQueryKernel(uint2* res, int* resCounter, int maxRes,
 			const LBVH::node* nodes, const uint32_t* objIDs,
-			const uint32_t* queryIDs, const Bound<3, float>* queryAABBs, const int numQueries, int stackSize) {
+			const uint32_t* queryIDs, const AABB* queryAABBs, const int numQueries, int stackSize) {
 
 			// This is a bit ugly but we want to compile the kernel for all stack sizes.
 #define DISPATCH_QUERY(N) case N: lbvhQueryKernel<IGNORE_SELF, N> << <(numQueries + 127) / 128, 128 >> > (res, resCounter, maxRes, nodes, objIDs, queryIDs, queryAABBs, numQueries); break;
@@ -312,6 +326,26 @@ namespace gmcCuda {
 			}
 #undef DISPATCH_QUERY
 		}
+
+#pragma region Clustering Test
+		__global__ void MakeClusters(LBVH::node* nodes,
+			uint32_t* leafParents, uint32_t const* mortonCodes, uint32_t const* objIDs, int numObjs, uint32_t* outClusterObjs) {
+
+			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
+			if (tid >= numObjs - 1) return;
+
+			// determine node's own range
+			uint2 range = determineRange(mortonCodes, numObjs, tid);
+
+			// dst array
+			uint32_t* dst = outClusterObjs + tid;
+
+			uint32_t length = abs((int)(range.y & ~0x8000'0000) - (int)(range.x & ~0x8000'0000));
+			dst[0] = length;			
+		}
+#pragma endregion
+
+
 	}
 
 #pragma endregion
@@ -334,15 +368,15 @@ namespace gmcCuda {
 			thrust::raw_pointer_cast(impl->d_objIDs.data()),
 			thrust::raw_pointer_cast(impl->d_flags.data()), numObjs);
 
-		checkCudaErrors(cudaGetLastError());
+		CUDA_CHECK_LAST_ERROR();
 	}
 
 	void LBVH::compute(aabb* devicePtr, size_t size) {
 		impl->d_objs = thrust::device_ptr<aabb>(devicePtr);
 		numObjs = size;
 
-		const unsigned int numInternalNodes = numObjs - 1;	// Total number of internal nodes
-		const unsigned int numNodes = numObjs * 2 - 1;		// Total number of nodes
+		const unsigned int numInternalNodes = numObjs - 1;	// Total number of internal nodes, (binary tree)
+		const unsigned int numNodes = numObjs * 2 - 1;		// Total number of nodes (leaves + internaNodes)
 
 		impl->d_morton.resize(numObjs);
 		impl->d_objIDs.resize(numObjs);
@@ -361,9 +395,10 @@ namespace gmcCuda {
 		});
 
 		// Compute morton codes. These don't have to be unique here.
-		LBVHKernels::mortonKernel<float> << <(numObjs + 255) / 256, 256 >> > (
+		LBVHKernels::mortonKernel << <(numObjs + 255) / 256, 256 >> > (
 			devicePtr, thrust::raw_pointer_cast(impl->d_morton.data()),
 			thrust::raw_pointer_cast(impl->d_objIDs.data()), rootBounds, numObjs);
+
 
 		// Sort morton codes
 		thrust::stable_sort_by_key(impl->d_morton.begin(), impl->d_morton.end(), impl->d_objIDs.begin());
@@ -375,11 +410,42 @@ namespace gmcCuda {
 			thrust::raw_pointer_cast(impl->d_morton.data()),
 			thrust::raw_pointer_cast(impl->d_objIDs.data()), numObjs);
 
+		
+#if (0) // Todo TEMP
+		constexpr uint32_t clusterMaxTriangles = 1;
+		thrust::device_vector<uint32_t> d_clusterObjs(numObjs* clusterMaxTriangles, 0);
+
+		LBVHKernels::MakeClusters << <(numInternalNodes + 255) / 256, 256 >> > (
+			thrust::raw_pointer_cast(impl->d_nodes.data()),
+			thrust::raw_pointer_cast(impl->d_leafParents.data()),
+			thrust::raw_pointer_cast(impl->d_morton.data()),
+			thrust::raw_pointer_cast(impl->d_objIDs.data()), numObjs, thrust::raw_pointer_cast(d_clusterObjs.data()));
+		CUDA_CHECK_LAST_ERROR();
+
+		std::vector<int> h_std_vec(numObjs* clusterMaxTriangles);
+		thrust::copy(d_clusterObjs.begin(), d_clusterObjs.end(), h_std_vec.begin());
+		thrust::sort(h_std_vec.begin(), h_std_vec.end());
+
+		std::vector <LBVH::node> h_nodes(impl->d_nodes.size());
+		thrust::copy(impl->d_nodes.begin(), impl->d_nodes.end(), h_nodes.begin());
+
+
+		//auto diffChecker = [&](LBVH::node* pNode, uint32_t nodeID)
+		//	{
+		//		uint32_t ret = (h_std_vec[nodeID] - max(h_std_vec[pNode->leftIdx], h_std_vec[pNode->rightIdx]));
+
+		//		diffChecker();
+		//	};
+		//diffChecker()
+#endif
+
+
+
 		refit();
 		maxStackSize = impl->d_flags[0];		// Save max depth for query invocation
 	}
 
-	size_t LBVH::query(ivec2* d_res, size_t resSize, LBVH* other) const {
+	size_t LBVH::query(uint2* d_res, size_t resSize, LBVH* other) const {
 		// Borrow the flags array for the counter
 		int* d_counter = (int*)thrust::raw_pointer_cast(impl->d_flags.data());
 		cudaMemset(d_counter, 0, sizeof(int));
@@ -395,11 +461,11 @@ namespace gmcCuda {
 			numQuery, maxStackSize
 		);
 
-		checkCudaErrors(cudaGetLastError());
-		return std::min((size_t)impl->d_flags[0], resSize);
+		CUDA_CHECK_LAST_ERROR();
+		return min((size_t)impl->d_flags[0], resSize);
 	}
 
-	size_t LBVH::query(ivec2* d_res, size_t resSize) const {
+	size_t LBVH::query(uint2* d_res, size_t resSize) const {
 		// Borrow the flags array for the counter
 		int* d_counter = (int*)thrust::raw_pointer_cast(impl->d_flags.data());
 		cudaMemset(d_counter, 0, sizeof(int));
@@ -415,211 +481,213 @@ namespace gmcCuda {
 			numQuery, maxStackSize
 		);
 
-		checkCudaErrors(cudaGetLastError());
-		return std::min((size_t)impl->d_flags[0], resSize);
+		CUDA_CHECK_LAST_ERROR();
+
+		return min((size_t)impl->d_flags[0], resSize);
 	}
 
 #pragma endregion
-#pragma region testing
-
-	void testAABBMatch(gmcCuda::Bound<3, float> a, gmcCuda::Bound<3, float> b, int idx) {
-		// Check if they match
-		if (length2(a.min - b.min) > 1e-7f || length2(a.max - b.max) > 1e-7f) {
-			printf("Error: AABB mismatch node %d\n", idx);
-			printf("Expected:\n");
-			gmcCuda::print(a.min);
-			gmcCuda::print(a.max);
-			printf("Found:\n");
-			gmcCuda::print(b.min);
-			gmcCuda::print(b.max);
-		}
-	}
-
-	gmcCuda::Bound<3, float> lbvhCheckAABBMerge(
-		thrust::host_vector<LBVH::node>& nodes,
-		uint32_t idx) {
-		auto node = nodes[idx];
-		if (!(node.leftIdx >> 31)) {
-			auto o = lbvhCheckAABBMerge(nodes, node.leftIdx);
-			testAABBMatch(o, node.bounds[0], node.leftIdx & 0x7FFFFFFF);
-		}
-		if (!(node.rightIdx >> 31)) {
-			auto o = lbvhCheckAABBMerge(nodes, node.rightIdx);
-			testAABBMatch(o, node.bounds[1], node.rightIdx & 0x7FFFFFFF);
-		}
-
-		node.bounds[0].absorb(node.bounds[1]);
-		return node.bounds[0];
-	}
-
-	ivec2 lbvhCheckIndexMerge(
-		thrust::host_vector<LBVH::node>& nodes,
-		uint32_t idx, int numObjs) {
-		bool isLeaf = idx >> 31;
-		idx &= 0x7FFFFFFF;
-
-		if (isLeaf) return ivec2(idx);
-		auto node = nodes[idx];
-		ivec2 range(idx, node.fence);
-		if (range.y < range.x) std::swap(range.x, range.y);
-
-		auto left = lbvhCheckIndexMerge(nodes, node.leftIdx, numObjs);
-		auto right = lbvhCheckIndexMerge(nodes, node.rightIdx, numObjs);
-		left.x = std::min(left.x, right.x);
-		left.y = std::max(left.y, right.y);
-
-		// Check if they match
-		if (left != range)
-			printf("Error: Index range mismatch\n");
-
-		return left;
-	}
-
-	void LBVH::bvhSelfCheck() const {
-		printf("\nLBVH self check...\n");
-
-		// Get nodes
-		thrust::host_vector<node> nodes(impl->d_nodes.begin(), impl->d_nodes.end());
-		thrust::host_vector<uint32_t> morton(impl->d_morton.begin(), impl->d_morton.end());
-		thrust::host_vector<uint32_t> leafParent(impl->d_leafParents.begin(), impl->d_leafParents.end());
-
-		// Check sizes
-		if (nodes.size() != numObjs - 1 || morton.size() != numObjs)
-			printf("Error: Incorrect memory sizes\n");
-
-		// Check morton codes
-		for (size_t i = 1; i < numObjs; i++)
-			if (morton[i - 1] > morton[i])
-				printf("Bad morton code ordering\n");
-
-		// Check that all children have the correct parent
-		for (size_t i = 1; i < numObjs - 1; i++) {
-			auto node = nodes[i];
-			uint32_t isRight = node.parentIdx >> 31;
-			uint32_t parentIdx = node.parentIdx & 0x7FFFFFFF;
-			auto parent = nodes[parentIdx];
-
-			if ((isRight ? parent.rightIdx : parent.leftIdx) != i)
-				printf("Error: Child node has incorrect parent\n");
-		}
-
-		for (size_t i = 0; i < numObjs; i++) {
-			uint32_t parentIdx = leafParent[i];
-			uint32_t isRight = parentIdx >> 31;
-			parentIdx &= 0x7FFFFFFF;
-			auto parent = nodes[parentIdx];
-
-			if ((isRight ? parent.rightIdx : parent.leftIdx) != (i | 0x80000000))
-				printf("Error: Leaf node has incorrect parent\n");
-		}
-
-		// Check that all nodes are accessible from the root
-		std::vector<uint32_t> stack;
-		int numVisited = 0;
-		int maxSize = 0;
-		stack.push_back(0);
-		while (stack.size()) {
-			auto idx = stack.back();
-			stack.pop_back();
-			numVisited++;
-			if (idx >> 31) continue;
-			idx &= 0x7FFFFFFF;
-			auto node = nodes[idx];
-			stack.push_back(node.leftIdx);
-			stack.push_back(node.rightIdx);
-			maxSize = std::max(maxSize, (int)stack.size());
-		}
-		if (numVisited != numObjs * 2 - 1)
-			printf("Error: Not all nodes are accessible from the root. Only %d/%d nodes are found.\n", numVisited, 2 * numObjs - 1);
-		if (maxStackSize != maxSize)
-			printf("Error: Max stack size mismatch. Stored %d, found %d\n", maxStackSize, maxSize);
-
-		// Check merging of indices and aabbs
-		lbvhCheckIndexMerge(nodes, 0, numObjs);
-		testAABBMatch(lbvhCheckAABBMerge(nodes, 0u), rootBounds, 0);
-
-		// printf("Num nodes: %d\n", nodes.size());
-		printf("Max stack size: %d\n", maxStackSize);
-		printf("Node size: %d\n", sizeof(LBVH::node));
-		printf("LBVH self check complete.\n\n");
-	}
-
-	// Tests the LBVH
-	void testLBVH() {
-		const int N = 100000;
-		const float R = 0.001f;
-
-		printf("Generating Data...\n");
-		vector<gmcCuda::Bound<3, float>> points(N);
-
-		srand(1);
-		for (size_t i = 0; i < N; i++) {
-			gmcCuda::Bound<3, float> b(vec3(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX));
-			b.pad(R);
-			points[i] = b;
-		}
-
-		thrust::device_vector<gmcCuda::Bound<3, float>> d_points(points.begin(), points.end());
-		thrust::device_vector<ivec2> d_res(100 * N);
-		cudaDeviceSynchronize();
-
-		// Build BVH
-		LBVH bvh;
-		printf("Building LBVH...\n");
-		bvh.compute(thrust::raw_pointer_cast(d_points.data()), N);
-		cudaDeviceSynchronize();
-
-		// Query BVH
-		printf("Querying LBVH...\n");
-		int numCols = bvh.query(thrust::raw_pointer_cast(d_res.data()), d_res.size());
-
-		// Print results
-		printf("Getting results...\n");
-		thrust::host_vector<ivec2> res(d_res.begin(), d_res.begin() + numCols);
-
-		printf("%d collision pairs found on GPU.\n", res.size());
-		// printf("GPU:\n");
-		// for (size_t i = 0; i < res.size(); i++)
-		// 	printf("%d %d\n", res[i].x, res[i].y);
-
-		// Brute force compute the same result
-		std::unordered_set<ivec2> resSet;
-		bool good = true;
-
-		for (size_t i = 0; i < res.size(); i++) {
-			ivec2 a = res[i];
-			if (a.x > a.y) std::swap(a.x, a.y);
-			if (!resSet.insert(a).second) {
-				printf("Error: Duplicate result\n");
-				good = false;
-			}
-		}
-
-		int numCPUFound = 0;
-		printf("\nRunning brute force CPU collision detection...\n");
-#pragma omp parallel for
-		for (int i = 0; i < N; i++)
-			for (int j = i + 1; j < N; j++)
-				if (points[i].intersects(points[j])) {
-#pragma omp atomic
-					numCPUFound++;
-					if (resSet.find(ivec2(i, j)) == resSet.end()) {
-						printf("Error: CPU result %d %d not found in GPU result.\n", i, j);
-						good = false;
-					}
-				}
-
-		if (numCPUFound != res.size()) {
-			printf("Error: CPU and GPU results do not match\n");
-			good = false;
-		}
-
-		printf("%d collision pairs found on CPU.\n", numCPUFound);
-		printf(good ? "CPU and GPU results match.\n" : "CPU and GPU results MISMATCH!\n");
-
-		bvh.bvhSelfCheck();
-	}
-
-#pragma endregion
+//
+//#pragma region testing
+//
+//	void testAABBMatch(gmcCuda::Bound<3, float> a, gmcCuda::Bound<3, float> b, int idx) {
+//		// Check if they match
+//		if (length2(a.min - b.min) > 1e-7f || length2(a.max - b.max) > 1e-7f) {
+//			printf("Error: AABB mismatch node %d\n", idx);
+//			printf("Expected:\n");
+//			gmcCuda::print(a.min);
+//			gmcCuda::print(a.max);
+//			printf("Found:\n");
+//			gmcCuda::print(b.min);
+//			gmcCuda::print(b.max);
+//		}
+//	}
+//
+//	gmcCuda::Bound<3, float> lbvhCheckAABBMerge(
+//		thrust::host_vector<LBVH::node>& nodes,
+//		uint32_t idx) {
+//		auto node = nodes[idx];
+//		if (!(node.leftIdx >> 31)) {
+//			auto o = lbvhCheckAABBMerge(nodes, node.leftIdx);
+//			testAABBMatch(o, node.bounds[0], node.leftIdx & 0x7FFFFFFF);
+//		}
+//		if (!(node.rightIdx >> 31)) {
+//			auto o = lbvhCheckAABBMerge(nodes, node.rightIdx);
+//			testAABBMatch(o, node.bounds[1], node.rightIdx & 0x7FFFFFFF);
+//		}
+//
+//		node.bounds[0].absorb(node.bounds[1]);
+//		return node.bounds[0];
+//	}
+//
+//	ivec2 lbvhCheckIndexMerge(
+//		thrust::host_vector<LBVH::node>& nodes,
+//		uint32_t idx, int numObjs) {
+//		bool isLeaf = idx >> 31;
+//		idx &= 0x7FFFFFFF;
+//
+//		if (isLeaf) return ivec2(idx);
+//		auto node = nodes[idx];
+//		ivec2 range(idx, node.fence);
+//		if (range.y < range.x) std::swap(range.x, range.y);
+//
+//		auto left = lbvhCheckIndexMerge(nodes, node.leftIdx, numObjs);
+//		auto right = lbvhCheckIndexMerge(nodes, node.rightIdx, numObjs);
+//		left.x = std::min(left.x, right.x);
+//		left.y = std::max(left.y, right.y);
+//
+//		// Check if they match
+//		if (left != range)
+//			printf("Error: Index range mismatch\n");
+//
+//		return left;
+//	}
+//
+//	void LBVH::bvhSelfCheck() const {
+//		printf("\nLBVH self check...\n");
+//
+//		// Get nodes
+//		thrust::host_vector<node> nodes(impl->d_nodes.begin(), impl->d_nodes.end());
+//		thrust::host_vector<uint32_t> morton(impl->d_morton.begin(), impl->d_morton.end());
+//		thrust::host_vector<uint32_t> leafParent(impl->d_leafParents.begin(), impl->d_leafParents.end());
+//
+//		// Check sizes
+//		if (nodes.size() != numObjs - 1 || morton.size() != numObjs)
+//			printf("Error: Incorrect memory sizes\n");
+//
+//		// Check morton codes
+//		for (size_t i = 1; i < numObjs; i++)
+//			if (morton[i - 1] > morton[i])
+//				printf("Bad morton code ordering\n");
+//
+//		// Check that all children have the correct parent
+//		for (size_t i = 1; i < numObjs - 1; i++) {
+//			auto node = nodes[i];
+//			uint32_t isRight = node.parentIdx >> 31;
+//			uint32_t parentIdx = node.parentIdx & 0x7FFFFFFF;
+//			auto parent = nodes[parentIdx];
+//
+//			if ((isRight ? parent.rightIdx : parent.leftIdx) != i)
+//				printf("Error: Child node has incorrect parent\n");
+//		}
+//
+//		for (size_t i = 0; i < numObjs; i++) {
+//			uint32_t parentIdx = leafParent[i];
+//			uint32_t isRight = parentIdx >> 31;
+//			parentIdx &= 0x7FFFFFFF;
+//			auto parent = nodes[parentIdx];
+//
+//			if ((isRight ? parent.rightIdx : parent.leftIdx) != (i | 0x80000000))
+//				printf("Error: Leaf node has incorrect parent\n");
+//		}
+//
+//		// Check that all nodes are accessible from the root
+//		std::vector<uint32_t> stack;
+//		int numVisited = 0;
+//		int maxSize = 0;
+//		stack.push_back(0);
+//		while (stack.size()) {
+//			auto idx = stack.back();
+//			stack.pop_back();
+//			numVisited++;
+//			if (idx >> 31) continue;
+//			idx &= 0x7FFFFFFF;
+//			auto node = nodes[idx];
+//			stack.push_back(node.leftIdx);
+//			stack.push_back(node.rightIdx);
+//			maxSize = std::max(maxSize, (int)stack.size());
+//		}
+//		if (numVisited != numObjs * 2 - 1)
+//			printf("Error: Not all nodes are accessible from the root. Only %d/%d nodes are found.\n", numVisited, 2 * numObjs - 1);
+//		if (maxStackSize != maxSize)
+//			printf("Error: Max stack size mismatch. Stored %d, found %d\n", maxStackSize, maxSize);
+//
+//		// Check merging of indices and aabbs
+//		lbvhCheckIndexMerge(nodes, 0, numObjs);
+//		testAABBMatch(lbvhCheckAABBMerge(nodes, 0u), rootBounds, 0);
+//
+//		// printf("Num nodes: %d\n", nodes.size());
+//		printf("Max stack size: %d\n", maxStackSize);
+//		printf("Node size: %d\n", sizeof(LBVH::node));
+//		printf("LBVH self check complete.\n\n");
+//	}
+//
+//	// Tests the LBVH
+//	void testLBVH() {
+//		const int N = 100000;
+//		const float R = 0.001f;
+//
+//		printf("Generating Data...\n");
+//		vector<gmcCuda::Bound<3, float>> points(N);
+//
+//		srand(1);
+//		for (size_t i = 0; i < N; i++) {
+//			gmcCuda::Bound<3, float> b(vec3(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX));
+//			b.pad(R);
+//			points[i] = b;
+//		}
+//
+//		thrust::device_vector<gmcCuda::Bound<3, float>> d_points(points.begin(), points.end());
+//		thrust::device_vector<ivec2> d_res(100 * N);
+//		cudaDeviceSynchronize();
+//
+//		// Build BVH
+//		LBVH bvh;
+//		printf("Building LBVH...\n");
+//		bvh.compute(thrust::raw_pointer_cast(d_points.data()), N);
+//		cudaDeviceSynchronize();
+//
+//		// Query BVH
+//		printf("Querying LBVH...\n");
+//		int numCols = bvh.query(thrust::raw_pointer_cast(d_res.data()), d_res.size());
+//
+//		// Print results
+//		printf("Getting results...\n");
+//		thrust::host_vector<ivec2> res(d_res.begin(), d_res.begin() + numCols);
+//
+//		printf("%d collision pairs found on GPU.\n", res.size());
+//		// printf("GPU:\n");
+//		// for (size_t i = 0; i < res.size(); i++)
+//		// 	printf("%d %d\n", res[i].x, res[i].y);
+//
+//		// Brute force compute the same result
+//		std::unordered_set<ivec2> resSet;
+//		bool good = true;
+//
+//		for (size_t i = 0; i < res.size(); i++) {
+//			ivec2 a = res[i];
+//			if (a.x > a.y) std::swap(a.x, a.y);
+//			if (!resSet.insert(a).second) {
+//				printf("Error: Duplicate result\n");
+//				good = false;
+//			}
+//		}
+//
+//		int numCPUFound = 0;
+//		printf("\nRunning brute force CPU collision detection...\n");
+//#pragma omp parallel for
+//		for (int i = 0; i < N; i++)
+//			for (int j = i + 1; j < N; j++)
+//				if (points[i].intersects(points[j])) {
+//#pragma omp atomic
+//					numCPUFound++;
+//					if (resSet.find(ivec2(i, j)) == resSet.end()) {
+//						printf("Error: CPU result %d %d not found in GPU result.\n", i, j);
+//						good = false;
+//					}
+//				}
+//
+//		if (numCPUFound != res.size()) {
+//			printf("Error: CPU and GPU results do not match\n");
+//			good = false;
+//		}
+//
+//		printf("%d collision pairs found on CPU.\n", numCPUFound);
+//		printf(good ? "CPU and GPU results match.\n" : "CPU and GPU results MISMATCH!\n");
+//
+//		bvh.bvhSelfCheck();
+//	}
+//
+//#pragma endregion
 
 }

@@ -12,7 +12,7 @@
         if (err != cudaSuccess) {                                                 \
             fprintf(stderr, "CUDA Error: %s (error code %d) at %s:%d\n",          \
                     cudaGetErrorString(err), err, __FILE__, __LINE__);            \
-            exit(EXIT_FAILURE);                                                   \
+            /*exit(EXIT_FAILURE);*/                                                   \
         }                                                                         \
     } while (0)
 
@@ -22,7 +22,7 @@
         if (err != cudaSuccess) {                                                 \
             fprintf(stderr, "CUDA Kernel Error: %s (error code %d) at %s:%d\n",   \
                     cudaGetErrorString(err), err, __FILE__, __LINE__);            \
-            exit(EXIT_FAILURE);                                                   \
+            /*exit(EXIT_FAILURE);*/                                                   \
         }                                                                         \
     } while (0)
 
@@ -33,3 +33,6 @@
     } while (0)
 
 #define ROUND_UP_DIM(N, S) ((((N) + (S) - 1) / (S)))
+
+#define DEBUG_WATCH_CUDA_MEM(DST, SRC, TOTAL_SIZE) \
+cudaMemcpy((void*)DST, SRC, TOTAL_SIZE, cudaMemcpyDeviceToHost);

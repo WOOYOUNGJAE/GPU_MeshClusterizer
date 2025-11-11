@@ -8,6 +8,4 @@
 #define GMC_DLL _declspec(dllimport)
 #endif
 
-
-
 #endif
