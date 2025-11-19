@@ -9,3 +9,12 @@
     (unsigned short)(((IS_HIGHER) != 0) \
         ? ((TARGET) >> 16) & 0xFFFF \
         : (TARGET) & 0xFFFF)
+
+#define MARK_MSB_UINT32(TARGET, MARK) \
+    ((TARGET) |= ((unsigned int)((MARK) != 0) << 31))
+
+#define UNPACK_MSB_UINT32(TARGET) \
+    ((TARGET >> 31) & 1u)
+
+#define IGNORE_MSB_UINT32(TARGET) \
+    ((TARGET) & ~0x8000'0000u)

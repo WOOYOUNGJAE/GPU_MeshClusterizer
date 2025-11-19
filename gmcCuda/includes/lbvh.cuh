@@ -18,8 +18,8 @@ namespace gmcCuda {
 			uint32_t parentIdx;			// Parent node. Most siginificant bit (MSB) is used to indicate whether this is a left or right child of said parent.
 			uint32_t leftIdx;			// Index of left child node. MSB is used to indicate whether this is a leaf node.
 			uint32_t rightIdx;			// Index of right child node. MSB is used to indicate whether this is a leaf node.
-			//uint32_t fence;				// This subtree have indices between fence and current index.
-			uint32_t range_fence;		// first 16bits for range, other 16bits for fence.
+			uint32_t fence;				// This subtree have indices between fence and current index.
+			//uint32_t range_fence;		// first 16bits for range, other 16bits for fence.
 
 			aabb bounds[2];
 		};
@@ -30,13 +30,15 @@ namespace gmcCuda {
 
 		size_t numObjs = 0;
 		aabb rootBounds;
-
+		uint16_t clusterSize = 64;
+		uint32_t* d_oldIndexBuffer = nullptr;
+		uint32_t* d_newIndexBuffer = nullptr; // Clustered Index Buffer
 		// This is exactly how large a stack needs to be to traverse this tree.
 		// Used by query() to minimize register usage.
 		int maxStackSize = 1;
 
 	public:
-		LBVH();
+		LBVH(uint32_t* d_IndexBuffer);
 		~LBVH();
 
 		// Returns the total bounds of every node in this tree.
@@ -76,6 +78,16 @@ namespace gmcCuda {
 
 		// Does a self check of the BVH structure for debugging purposes.
 		void bvhSelfCheck() const;
+
+		struct IsValidNodeFunctor
+		{
+			const LBVH::node* nodes;
+			uint2* nodeRanges;
+			__host__ __device__
+				IsValidNodeFunctor(const LBVH::node* _nodes, uint2* _nodeRanges) : nodes(_nodes), nodeRanges(_nodeRanges) {}
+
+			__host__ __device__ bool operator()(int i);
+		};
 	};
 
 	// Tests the LBVH with a simple test case of 100k objects.

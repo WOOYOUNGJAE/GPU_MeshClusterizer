@@ -3,5 +3,6 @@
   <ItemGroup>
     <ClInclude Include="gmcDefines.h" />
     <ClInclude Include="gmcMacros.h" />
+    <ClInclude Include="gmcStructs.h" />
   </ItemGroup>
 </Project>

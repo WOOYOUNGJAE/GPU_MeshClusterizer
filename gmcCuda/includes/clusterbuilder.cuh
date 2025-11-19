@@ -131,7 +131,7 @@ namespace gmcCuda
 			CUDA_SYNC_CHECK();
 
 			// Build BVH
-			LBVH bvh;
+			LBVH bvh(nullptr);
 			printf("Building LBVH...\n");
 			bvh.compute(thrust::raw_pointer_cast(pGeometry->m_dAABBs.data()), numTriangles);
 			CUDA_SYNC_CHECK();

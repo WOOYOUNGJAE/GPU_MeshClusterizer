@@ -65,6 +65,7 @@
       <AdditionalOptions>--std=c++17 --extended-lambda %(AdditionalOptions)</AdditionalOptions>
       <Defines>GMC_EXPORTS</Defines>
       <Include>$(SolutionDir)External\glm\;$(ProjectDir)includes\;$(ProjectDir)includes\nvUtils\;%(Include)</Include>
+      <CodeGeneration>compute_70,sm_70;</CodeGeneration>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -89,6 +90,7 @@
       <AdditionalOptions>--std=c++17 --extended-lambda %(AdditionalOptions)</AdditionalOptions>
       <Defines>GMC_EXPORTS</Defines>
       <Include>$(SolutionDir)External\glm\;$(ProjectDir)includes\;$(ProjectDir)includes\nvUtils\;%(Include)</Include>
+      <CodeGeneration>compute_70,sm_70;</CodeGeneration>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>

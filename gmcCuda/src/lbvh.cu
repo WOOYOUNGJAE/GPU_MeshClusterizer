@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <lbvh.cuh>
 
 #include <cuda_runtime.h>
@@ -13,22 +14,33 @@
 #include <thrust/fill.h>
 #include <thrust/reduce.h>
 #include <thrust/execution_policy.h>
+#include <thrust/sequence.h>
+
+#include <cub/cub.cuh>
 
 #include <unordered_set>
 
 #include "gmcMacros.h"
+#include "gmcStructs.h"
 
+#define CLUSTER_MAX 64
+#define CLUSTER_MIN (CLUSTER_MIN / 2)
 
 namespace gmcCuda {
 
 	struct LBVH::thrustImpl {
 		thrust::device_ptr<aabb> d_objs = nullptr;
-		thrust::device_vector<int> d_flags;				// Flags used for updating the tree
+		thrust::device_vector<int> d_flags;					// Flags used for updating the tree
 
-		thrust::device_vector<uint32_t> d_morton;		// Morton codes for each object
-		thrust::device_vector<uint32_t> d_objIDs;		// Object ID for each leaf
-		thrust::device_vector<uint32_t> d_leafParents;	// Parent ID for each leaf. MSB is used to indicate whether this is a left or right child of said parent.
-		thrust::device_vector<node> d_nodes;			// The internal tree nodes
+		thrust::device_vector<uint32_t> d_morton;			// Morton codes for each object
+		thrust::device_vector<uint32_t> d_objIDs;			// Object ID for each leaf
+		thrust::device_vector<uint32_t> d_leafParents;		// Parent ID for each leaf. MSB is used to indicate whether this is a left or right child of said parent.
+		thrust::device_vector<node> d_nodes;				// The internal tree nodes
+
+		// node's covering ranges for leaves. y>=x is guaranteed
+		// uint2.x's msb : whether this node is a candidate for clustering.
+		thrust::device_vector<uint2> d_nodeRanges;
+		thrust::device_vector<uint32_t> d_clusterTriCounter;
 	};
 
 #pragma region LBVHDevice
@@ -121,18 +133,34 @@ namespace gmcCuda {
 			return split;
 		}
 
-		// Builds out the internal nodes of the LBVH
-		__global__ void lbvhBuildInternalKernel(LBVH::node* nodes,
-			uint32_t* leafParents, uint32_t const* mortonCodes, uint32_t const* objIDs, int numObjs) {
+		/**
+		 * Builds out the internal nodes of the LBVH
+		 * @param nodeRanges : node's full covering range for leaves
+		 * @param clusterTriMax
+		 * @param clusterTriMin
+		 */
+		__global__ void lbvhBuildInternalKernel(LBVH::node* nodes, uint32_t* leafParents,
+		                                        uint32_t const* mortonCodes, uint32_t const* objIDs, int numObjs, uint2* nodeRanges, const uint16_t clusterTriMax, const uint16_t
+		                                        clusterTriMin) {
 
 			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
 			if (tid >= numObjs - 1) return;
 
 			// determine node's own range
 			uint2 range = determineRange(mortonCodes, numObjs, tid);
+			uint2 nodeRange = range;
 
-			//nodes[tid].fence = (tid == range.x) ? range.y : range.x;
-			STORE_UINT16_IN_UINT32(nodes[tid].range_fence, false, (tid == range.x) ? range.y : range.x);
+			// Cluster things
+			{
+				uint32_t numCoveringTriangles = nodeRange.y - nodeRange.x + 1;
+				bool isValidCluster = (clusterTriMin <= numCoveringTriangles) && (numCoveringTriangles <= clusterTriMax);
+				// If Valid length(numTri), Mark on range's min
+				MARK_MSB_UINT32(nodeRange.x, isValidCluster);
+				nodeRanges[tid] = nodeRange; // write
+			}
+						
+
+			nodes[tid].fence = (tid == range.x) ? range.y : range.x;
 			const int gamma = findSplit(mortonCodes, range.x, range.y);
 
 			// Left and right children are neighbors to the split point
@@ -157,6 +185,8 @@ namespace gmcCuda {
 
 			nodes[tid].leftIdx = range.x;
 			nodes[tid].rightIdx = range.y;
+
+
 		}
 
 			// Refits the AABBs of the internal nodes
@@ -257,8 +287,7 @@ namespace gmcCuda {
 
 							// Ignore duplicate and self intersections
 							if (IGNORE_SELF)
-								//if (max(nodeIdx, node.fence) <= tid) continue;
-								if (max(nodeIdx, LOAD_UINT16_FROM_UINT32(node.range_fence, false)) <= tid) continue;
+								if (max(nodeIdx, node.fence) <= tid) continue;
 
 							// Internal node
 							if (node.bounds[0].intersects(queryAABB))
@@ -328,20 +357,126 @@ namespace gmcCuda {
 		}
 
 #pragma region Clustering Test
-		__global__ void MakeClusters(LBVH::node* nodes,
-			uint32_t* leafParents, uint32_t const* mortonCodes, uint32_t const* objIDs, int numObjs, uint32_t* outClusterObjs) {
+		__device__ __forceinline__ int32_t GetCluterID(int triID, const uint32_t* leafParents, const LBVH::node* nodes, const uint2* nodeRanges)
+		{
+			// start from leaf's parent
+			uint32_t curNode = leafParents[triID];
+			int32_t retClusterID = -1; // -1 If Not included in cluster
+			// bottom-up Find Cluster Node
+			while (true)
+			{
+				uint2 nodeRange = nodeRanges[curNode];
 
+				// Else If curNode is Valid, clusterID is curNode and return;
+				if (UNPACK_MSB_UINT32(nodeRange.x) == 1)
+				{
+					retClusterID = curNode;
+					curNode = nodes[curNode].parentIdx;
+					continue;
+				}
+				return retClusterID;
+			}
+		}
+		template<uint16_t CLUSTER_TRI_MAX = 64>
+		__global__ void Fill_ClusteredIndexBuffer(const uint32_t* triIDs, int numTriangles, const uint32_t* leafParents,
+			const LBVH::node* nodes, const uint2* nodeRanges, uint32_t* clusterCounter,
+			const uint32_t* __restrict__ oldIndexBuffer, uint32_t* __restrict__ newIndexBuffer)
+		{
+			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+			if (tid >= numTriangles) return;
+
+			int clusterID = GetCluterID(tid, leafParents, nodes, nodeRanges);
+			if (clusterID < 0) return;
+
+			uint8_t laneID = threadIdx.x & 31;
+			uint32_t activeMask = __activemask(); // get active threads from cur warp
+			uint32_t commonClusterGroup = __match_any_sync(activeMask, clusterID); // peer: thread mask with same clusterID
+			uint32_t laneMask = (1 << laneID) - 1; // [ 0,,0 curIdxInWarp(0) 1 1,,1 1 ]
+			// rank from the group. Count how many other lanes infront of me
+			int localRank = __popc(commonClusterGroup & laneMask); // __popc : count 1.
+			// leader : The Lowest Index
+			int leaderLane = __ffs(commonClusterGroup) - 1; // __ffs : [10101,,,01100"1"00] -> 3, and 2 is index
+			int groupSize = __popc(commonClusterGroup); // count commonClusterGroup
+			int baseLocalOffset = 0; // offset from current cluster triangles
+
+			if (laneID == leaderLane)
+			{
+				// Set baseOffset for this group(threads with common cluster), and add counter for next
+				baseLocalOffset = atomicAdd(&clusterCounter[clusterID], groupSize);
+			}
+
+			// Broadcast baseOffset to the group peers
+			baseLocalOffset = __shfl_sync(commonClusterGroup, baseLocalOffset, leaderLane);
+			int finalDstOffset = ((clusterID * CLUSTER_TRI_MAX) + (baseLocalOffset + localRank)) * 3; // stride * 3
+
+			uint3 tri = make_uint3(oldIndexBuffer[tid * 3 + 0], oldIndexBuffer[tid * 3 + 1], oldIndexBuffer[tid * 3 + 2]);
+			((uint3*)newIndexBuffer)[finalDstOffset] = tri;
+		}
+
+
+		__global__ void FilterValids(const LBVH::node* nodes, const uint2* nodeRanges, int numObjs, int* outValidNodeIndices)
+		{
 			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
 			if (tid >= numObjs - 1) return;
 
-			// determine node's own range
-			uint2 range = determineRange(mortonCodes, numObjs, tid);
+			uint2 nodeRange = nodeRanges[tid];
+			// If invalid node, Early return.
+			if (UNPACK_MSB_UINT32(nodeRange.x) == FALSE)
+				return;
+
+			LBVH::node node = nodes[tid];
+
+			// Check If Parent is Already Valid
+			if (UNPACK_MSB_UINT32(nodeRanges[node.parentIdx].x))
+				return;
+		}
+
+		template<uint16_t CLUSTER_TRI_MAX=64>
+		__global__ void MakeClusters_(const uint32_t* objIDs, int* validNodeIndices, int numValidNodes,
+			const uint2* nodeRanges, const uint32_t* IndexBuffer, uint32_t* outUsedVertices, gmc::Cluster* outClusters)
+		{
+			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
+			if (tid >= numValidNodes - 1) return;
+
+			uint32_t nodeIndex = validNodeIndices[tid];
+			uint2 nodeRange = nodeRanges[nodeIndex];
+
+			// 1. range의 min leaf부터 max leaf까지 objiD파악
+			uint32_t clusterTriangles[CLUSTER_TRI_MAX]{ };
+
+			// 2. objID에 해당하는 Tri, vertex(?)
+			// 3.	
+			// Todo -> collect meshlet vertices
+
+			gmc::Cluster cluster{};
+			cluster.triangle_count = nodeRange.y - IGNORE_MSB_UINT32(nodeRange.x) + 1;
+#if (1) // Fixed Constant Range
+			uint32_t localVertices[CLUSTER_TRI_MAX * 3];
+#pragma unroll
+			for (uint16_t i = 0; i < CLUSTER_TRI_MAX; ++i)
+			{
+				if (i > nodeRange.y)
+					break;
+
+				const uint32_t triID = nodeRange.x + i; // which triangle
+				const uint32_t indexBufferOffset = triID * 3;
+				// triangle's 3 index
+				const uint32_t triIndices[3] = { IndexBuffer[indexBufferOffset + 0], IndexBuffer[indexBufferOffset + 1], IndexBuffer[indexBufferOffset + 2]};
+				
+			}
+#else
+			for (uint32_t triID = nodeRange.x; triID <= nodeRange.y; ++triID)
+			{
+
+			}
+#endif
+
+
 
 			// dst array
-			uint32_t* dst = outClusterObjs + tid;
+			//uint32_t* dst = IndexBuffer + tid;
 
-			uint32_t length = abs((int)(range.y & ~0x8000'0000) - (int)(range.x & ~0x8000'0000));
-			dst[0] = length;			
 		}
 #pragma endregion
 
@@ -350,7 +485,9 @@ namespace gmcCuda {
 
 #pragma endregion
 #pragma region LBVH
-	LBVH::LBVH() : impl(std::make_unique<thrustImpl>()) {}
+	LBVH::LBVH(uint32_t* p_IndexBuffer) : d_oldIndexBuffer(p_IndexBuffer), impl(std::make_unique<thrustImpl>())
+	{
+	}
 	gmcCuda::LBVH::~LBVH() = default;
 
 	LBVH::aabb LBVH::bounds() {
@@ -383,6 +520,17 @@ namespace gmcCuda {
 		impl->d_leafParents.resize(numObjs);
 		impl->d_nodes.resize(numInternalNodes);
 		impl->d_flags.resize(numInternalNodes);
+		impl->d_nodeRanges.resize(numInternalNodes);
+		impl->d_clusterTriCounter.resize(clusterSize);
+
+		// First Build
+		if (d_oldIndexBuffer == nullptr && d_newIndexBuffer == nullptr)
+		{
+			cudaMalloc(&d_oldIndexBuffer, sizeof(uint32_t) * numObjs * 3);
+			uint32_t allocSize = sizeof(uint32_t) * ((numObjs + clusterSize - 1) & ~clusterSize) * 3;
+			cudaMalloc(&d_newIndexBuffer, allocSize); // multiple of clusterSize
+			cudaMemset(d_newIndexBuffer, 0xFFFF'FFFF, allocSize);
+		}
 
 		// Compute the bounding box for the whole scene so we can assign morton codes
 		rootBounds = aabb();
@@ -403,23 +551,111 @@ namespace gmcCuda {
 		// Sort morton codes
 		thrust::stable_sort_by_key(impl->d_morton.begin(), impl->d_morton.end(), impl->d_objIDs.begin());
 
+		constexpr uint16_t clusterTriMax = 64;
+		constexpr uint16_t clusterTriMin = (clusterTriMax >> 1) + 1;
 		// Build out the internal nodes
 		LBVHKernels::lbvhBuildInternalKernel << <(numInternalNodes + 255) / 256, 256 >> > (
 			thrust::raw_pointer_cast(impl->d_nodes.data()),
 			thrust::raw_pointer_cast(impl->d_leafParents.data()),
 			thrust::raw_pointer_cast(impl->d_morton.data()),
-			thrust::raw_pointer_cast(impl->d_objIDs.data()), numObjs);
+			thrust::raw_pointer_cast(impl->d_objIDs.data()),
+			numObjs,
+			thrust::raw_pointer_cast(impl->d_nodeRanges.data()), clusterTriMax, clusterTriMin);
 
+		//refit();
 		
-#if (0) // Todo TEMP
-		constexpr uint32_t clusterMaxTriangles = 1;
+#if (1) // Todo TEMP
+		CUDA_SYNC_CHECK();
+
+		LBVHKernels::Fill_ClusteredIndexBuffer << <(numInternalNodes + 511) / 512, 512 >> > (
+			thrust::raw_pointer_cast(impl->d_objIDs.data()),
+			numObjs,
+			thrust::raw_pointer_cast(impl->d_leafParents.data()),
+			thrust::raw_pointer_cast(impl->d_nodes.data()),
+			thrust::raw_pointer_cast(impl->d_nodeRanges.data()),
+			thrust::raw_pointer_cast(impl->d_clusterTriCounter.data()),
+			d_oldIndexBuffer,
+			d_newIndexBuffer);
+		CUDA_SYNC_CHECK();
+
+#if (1) // Thrust Stream Compaction
+		
+#else // CUB Stream Compaction
+#endif
+
+#pragma region OLD
+		constexpr uint32_t clusterMaxTriangles = 64;
 		thrust::device_vector<uint32_t> d_clusterObjs(numObjs* clusterMaxTriangles, 0);
 
-		LBVHKernels::MakeClusters << <(numInternalNodes + 255) / 256, 256 >> > (
-			thrust::raw_pointer_cast(impl->d_nodes.data()),
-			thrust::raw_pointer_cast(impl->d_leafParents.data()),
-			thrust::raw_pointer_cast(impl->d_morton.data()),
-			thrust::raw_pointer_cast(impl->d_objIDs.data()), numObjs, thrust::raw_pointer_cast(d_clusterObjs.data()));
+
+		// Collect Valid nodes (Device Compaction)
+		thrust::device_vector<int> d_tempIndices(numInternalNodes);
+		thrust::device_vector<int> d_validNodeIndices(numInternalNodes);
+		thrust::sequence(d_tempIndices.begin(), d_tempIndices.end()); // [0,1,2,,,, N-1]
+		int h_validNum, * d_validNum;
+		cudaMalloc(&d_validNum, sizeof(int));
+		void* d_tempStorage = nullptr;
+		size_t tempStorageBytes = 0;
+
+		IsValidNodeFunctor isValid = IsValidNodeFunctor(thrust::raw_pointer_cast(impl->d_nodes.data()),
+			thrust::raw_pointer_cast(impl->d_nodeRanges.data()));
+
+		cub::DeviceSelect::If(
+			d_tempStorage,
+			tempStorageBytes,
+			d_tempIndices.begin(),
+			d_validNodeIndices.begin(),
+			d_validNum,
+			(int)numInternalNodes,
+			isValid);
+		CUDA_SYNC_CHECK();
+		cudaMalloc(&d_tempStorage, tempStorageBytes);
+		cudaMemcpy(&h_validNum, d_validNum, sizeof(int), cudaMemcpyDeviceToHost);
+
+		cub::DeviceSelect::If(
+			d_tempStorage,
+			tempStorageBytes,
+			d_tempIndices.begin(),
+			d_validNodeIndices.begin(),
+			d_validNum,
+			(int)numInternalNodes,
+			isValid);
+		CUDA_SYNC_CHECK();
+		cudaMemcpy(&h_validNum, d_validNum, sizeof(int), cudaMemcpyDeviceToHost);
+
+
+		// d_validNodeIndices : 2,23,34,,,, : d_validNum
+		// getRange( nodes[d_validNodeIndices]  ). 
+
+		// DEBUG
+		thrust::host_vector<int> h_ValidNodeIndices(d_validNodeIndices.begin(), d_validNodeIndices.begin() + h_validNum);
+		std::vector<int> vec(h_ValidNodeIndices.begin(), h_ValidNodeIndices.end());
+
+		std::vector<int> nums;
+		thrust::host_vector<uint2> hRanges(impl->d_nodeRanges);
+		for (int i = 0; i < h_validNum; ++i)
+		{
+			uint2 range = hRanges[h_ValidNodeIndices[i]];
+			int num = range.y - IGNORE_MSB_UINT32(range.x) + 1;
+			nums.push_back(num);
+		}
+		std::sort(nums.begin(), nums.end());
+		//cub::DeviceSelect::Flagged(d_tempStorage, tempStorageBytes,
+		//	thrust::make_counting_iterator(0),   // [0, 1, 2, 3, ...]
+		//	d_validMask,                         // Flag array (0/1)
+		//	d_validNodeIndices,
+		//	d_numValid,
+		//	N)  
+#pragma endregion
+
+
+
+		//LBVHKernels::MakeClusters << <(numInternalNodes + 255) / 256, 256 >> > (
+		//	thrust::raw_pointer_cast(impl->d_nodes.data()),
+		//	thrust::raw_pointer_cast(impl->d_nodeRanges.data()),
+		//	thrust::raw_pointer_cast(impl->d_objIDs.data()),
+		//	numObjs,
+		//	thrust::raw_pointer_cast(d_clusterObjs.data()), nullptr, nullptr);
 		CUDA_CHECK_LAST_ERROR();
 
 		std::vector<int> h_std_vec(numObjs* clusterMaxTriangles);
@@ -441,7 +677,6 @@ namespace gmcCuda {
 
 
 
-		refit();
 		maxStackSize = impl->d_flags[0];		// Save max depth for query invocation
 	}
 
@@ -484,6 +719,16 @@ namespace gmcCuda {
 		CUDA_CHECK_LAST_ERROR();
 
 		return min((size_t)impl->d_flags[0], resSize);
+	}
+
+	bool LBVH::IsValidNodeFunctor::operator()(int i)
+	{
+		uint2 nodeRange = nodeRanges[i];
+		LBVH::node node = nodes[i];
+
+		// return If Valid itself, AND its parent is inValid
+		//return (UNPACK_MSB_UINT32(nodeRange.x) != 0);// && (UNPACK_MSB_UINT32(nodeRanges[node.parentIdx].x) == 0);
+		return (UNPACK_MSB_UINT32(nodeRange.x) != 0) && (UNPACK_MSB_UINT32(nodeRanges[IGNORE_MSB_UINT32(node.parentIdx)].x) == 0);
 	}
 
 #pragma endregion
