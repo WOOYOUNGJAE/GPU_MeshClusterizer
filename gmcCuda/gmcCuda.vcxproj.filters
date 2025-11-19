@@ -15,9 +15,6 @@
     <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h">
       <Filter>public</Filter>
     </ClInclude>
-    <ClInclude Include="includes\lbvh.cuh">
-      <Filter>private</Filter>
-    </ClInclude>
     <ClInclude Include="includes\gmcCudaIncludes.cuh">
       <Filter>private</Filter>
     </ClInclude>
@@ -44,7 +41,7 @@
     <CudaCompile Include="src\gmcCuda.cu">
       <Filter>private</Filter>
     </CudaCompile>
-    <CudaCompile Include="src\lbvh.cu">
+    <CudaCompile Include="src\clusterBuilder.cu">
       <Filter>private</Filter>
     </CudaCompile>
   </ItemGroup>

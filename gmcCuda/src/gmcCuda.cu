@@ -1,6 +1,5 @@
 #include <gmcCuda/gmcCuda.h>
 #include <clusterBuilder.cuh>
-#include <lbvh.cuh>
 #include <random>
 
 gmcCuda::ClusterBuilder::ClusterBuilder()

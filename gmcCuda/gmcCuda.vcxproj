@@ -94,18 +94,14 @@
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <CudaCompile Include="src\clusterBuilder.cu" />
     <CudaCompile Include="src\gmcCuda.cu" />
-    <CudaCompile Include="src\lbvh.cu">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </CudaCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h" />
     <ClInclude Include="includes\clusterBuilder.cuh" />
     <ClInclude Include="includes\cudaHelper.cuh" />
     <ClInclude Include="includes\gmcCudaIncludes.cuh" />
-    <ClInclude Include="includes\lbvh.cuh" />
     <ClInclude Include="includes\nvUtils\Matrix.h" />
     <ClInclude Include="includes\nvUtils\nvUtils.h" />
     <ClInclude Include="includes\nvUtils\Preprocessor.h" />
