@@ -5,6 +5,11 @@
 #include <gmcDefines.h>
 #include <cstdint>
 
+namespace gmc
+{
+	struct Cluster;
+}
+
 namespace gmcCuda
 {
 	// 
@@ -20,13 +25,17 @@ namespace gmcCuda
 	public:
 		// Allocate Geometry Data(Vertex Positions, Indices,,) to CUDA
 		void Init_WithDeviceAllocation(float* positions, uint32_t numPositions, uint32_t* indices, uint32_t numIndices);
+		void Init_WithExternalMappedMemory(float* mappedPositions, uint32_t numPositions, uint32_t* mappedIndices, uint32_t numIndices);
 
 		// build cluster with triangle
+		/**
+		 * @return num of clusters
+		 */
 		void BuildClusters();
+		uint32_t BuildClusters_SimpleMorton(uint16_t clusterMaxSize, gmc::Cluster* outClusters);
 
 	private:
 		class Impl;
 		Impl* pImpl = nullptr; // PIMPL
 	};
-	
 }

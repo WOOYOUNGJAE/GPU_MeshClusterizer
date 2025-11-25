@@ -4,12 +4,10 @@ namespace gmc // Common Namespace
 {
 	struct Cluster
 	{
-		/* offsets within meshlet_vertices and meshlet_triangles arrays with meshlet data */
-		unsigned int vertex_offset;
-		unsigned int triangle_offset;
+		unsigned int vertexOffset; // start offset from global vertex buffer
+		unsigned int triangleOffset; // start offset from global Index buffer
 
-		/* number of vertices and triangles used in the meshlet; data is stored in consecutive range defined by offset and count */
-		unsigned int vertex_count;
-		unsigned int triangle_count;
+		unsigned int vertexCount;
+		unsigned int triangleCount;
 	};	
 }
