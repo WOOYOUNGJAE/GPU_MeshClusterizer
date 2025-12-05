@@ -9,6 +9,8 @@
 
 namespace gmcCuda
 {
+	constexpr uint32_t BLOCK_SIZE_MORTON = 256;
+
 	/// <summary>
 	/// Very simple high-performance GPU LBVH that takes in a list of bounding boxes and outputs overlapping pairs.
 	/// Side note: null bounds (inf, -inf) as inputs are ignored automatically.
@@ -76,6 +78,11 @@ namespace gmcCuda
 	public:
 		~Impl()
 		{
+			cudaFree(m_dRootAABB);
+			cudaFree(m_dTriIDs);
+			cudaFree(m_dMortons);
+			cudaFree(m_dAABBs);
+			cudaFree(m_dNewIndexBuffer);
 		}
 		void Init(float* positions, uint32_t numPositions, uint32_t* indices, uint32_t numIndices);
 		void Init_WithExternalMappedMemory(float* mappedPositions, uint32_t numPositions, uint32_t* mappedIndices, uint32_t numIndices);
@@ -86,7 +93,6 @@ namespace gmcCuda
 		 * @return num of clusters
 		 */
 		uint32_t BuildClusters_SimpleMorton(uint16_t clusterMaxSize, gmc::Cluster* outClusters);
-	public:
 
 
 	public:
@@ -100,8 +106,13 @@ namespace gmcCuda
 		uint32_t* m_dNewIndexBuffer = nullptr; // Clustered Index Buffer
 	public: // for clustering process
 		AABB m_rootAABB;
+		AABB* m_dRootAABB;
 		AABB* m_dAABBs = nullptr;
 		uint32_t* m_dMortons = nullptr;
 		uint32_t* m_dTriIDs = nullptr;
+	private:
+		bool m_bClustersCreated = false;
+		uint32_t m_numClusters = 0;
+	private:
 	};
 }

@@ -1,6 +1,7 @@
 #include <clusterBuilder.cuh>
 
 #include <algorithm>
+#include <chrono>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -26,6 +27,32 @@
 
 namespace gmcCuda
 {
+	class ScopedCPUTimer
+	{
+	public:
+		ScopedCPUTimer()
+		{
+			std::string msg = name + " Starts\n";
+			printf(msg.c_str());
+			startTime = std::chrono::high_resolution_clock::now();
+		}
+		ScopedCPUTimer(const char* timerName) : name(std::string(timerName))
+		{
+			std::string msg = name + " Starts\n";
+			printf(msg.c_str());
+			startTime = std::chrono::high_resolution_clock::now();
+		}
+		~ScopedCPUTimer()
+		{
+			double duration = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - startTime).count();
+			std::string msg = name + " Result : " + std::to_string(duration) + "(ms)\n";
+			printf(msg.c_str());
+		}
+	private:
+		std::chrono::time_point<std::chrono::high_resolution_clock> startTime{};
+		std::string name = "Scoped CPU Timer";
+	};
+
 	struct LBVH::thrustImpl {
 		thrust::device_ptr<aabb> d_objs = nullptr;
 		thrust::device_vector<int> d_flags;					// Flags used for updating the tree
@@ -53,42 +80,65 @@ namespace gmcCuda
 				return b;
 			}
 		};
-		//__global__ inline void Calculate_Mortons(uint32_t numTriangles, const float3* vertices, const uint3* triangles, float3* outCentroids)
-		//{
-		//	const int triangleIndex = blockDim.x * blockIdx.x + threadIdx.x;
 
-		//	if (triangleIndex < numTriangles)
-		//	{
-		//		uint3 triangle = triangles[triangleIndex];
-		//		float3 v0 = vertices[triangle.x];
-		//		float3 v1 = vertices[triangle.y];
-		//		float3 v2 = vertices[triangle.z];
+		__device__ __forceinline__ void atomicMinFloat(float* addr, float value) {
+			if (*addr <= value) return;
+			int* addr_as_int = (int*)addr;
+			int old = *addr_as_int, assumed;
+			do {
+				assumed = old;
+				if (__int_as_float(assumed) <= value) break;
+				old = atomicCAS(addr_as_int, assumed, __float_as_int(value));
+			} while (assumed != old);
+		}
 
-		//		float3 pos = (1.f / 3.f) * (v0 + v1 + v2);
-		//	}
-		//}
-		//__device__ inline float3 Calculate_Morton(int triangleIndex, uint32_t numTriangles, const float3* vertices, const uint3* triangles)
-		//{
-		//	uint3 triangle = triangles[triangleIndex];
-		//	float3 v0 = vertices[triangle.x];
-		//	float3 v1 = vertices[triangle.y];
-		//	float3 v2 = vertices[triangle.z];
+		__device__ __forceinline__ void atomicMaxFloat(float* addr, float value) {
+			if (*addr >= value) return;
+			int* addr_as_int = (int*)addr;
+			int old = *addr_as_int, assumed;
+			do {
+				assumed = old;
+				if (__int_as_float(assumed) >= value) break;
+				old = atomicCAS(addr_as_int, assumed, __float_as_int(value));
+			} while (assumed != old);
+		}
 
-		//	float3 centroid = (1.f / 3.f) * (v0 + v1 + v2);
-		//	return centroid;
-		//}
 
-		__global__ void Fill_AABBs(uint32_t numTriangles, const float3* vertices, const uint3* triangles, AABB* outAABBs)
+		__device__ __forceinline__ AABB WarpReducedAABB(AABB aabb)
+		{
+#pragma unroll
+			for (uint32_t offset = 16; offset > 0; offset >>= 1)
+			{
+				// Get offset lane's min/max
+				float minX = __shfl_down_sync(0xFFFF'FFFF, aabb.min.x, offset);
+				float minY = __shfl_down_sync(0xFFFF'FFFF, aabb.min.y, offset);
+				float minZ = __shfl_down_sync(0xFFFF'FFFF, aabb.min.z, offset);
+
+				float maxX = __shfl_down_sync(0xFFFF'FFFF, aabb.max.x, offset);
+				float maxY = __shfl_down_sync(0xFFFF'FFFF, aabb.max.y, offset);
+				float maxZ = __shfl_down_sync(0xFFFF'FFFF, aabb.max.z, offset);
+
+				// Absorb
+				aabb.min.x = fminf(aabb.min.x, minX);
+				aabb.min.y = fminf(aabb.min.y, minY);
+				aabb.min.z = fminf(aabb.min.z, minZ);
+
+				aabb.max.x = fmaxf(aabb.max.x, maxX);
+				aabb.max.y = fmaxf(aabb.max.y, maxY);
+				aabb.max.z = fmaxf(aabb.max.z, maxZ);
+			}
+			return aabb;
+		}
+		__global__ void Fill_AABBs(uint32_t numTriangles, const float3* vertices, const uint32_t* indexBuffer, AABB* outAABBs)
 		{
 			const int triangleIndex = blockDim.x * blockIdx.x + threadIdx.x;
 
 			if (triangleIndex < numTriangles)
 			{
-				//float3 centroid = Calculate_Morton(triangleIndex, numTriangles, vertices, triangles);
-				uint3 triangle = triangles[triangleIndex];
-				float3 v0 = vertices[triangle.x];
-				float3 v1 = vertices[triangle.y];
-				float3 v2 = vertices[triangle.z];
+				uint32_t triangle[3] = { indexBuffer[triangleIndex * 3 + 0],  indexBuffer[triangleIndex * 3 + 1] , indexBuffer[triangleIndex * 3 + 2] };
+				float3 v0 = vertices[triangle[0]];
+				float3 v1 = vertices[triangle[1]];
+				float3 v2 = vertices[triangle[2]];
 
 				float3 triMin = MinFloat3(v0, v1, v2);
 				float3 triMax = MaxFloat3(v0, v1, v2);
@@ -96,6 +146,69 @@ namespace gmcCuda
 				outAABBs[triangleIndex] = AABB(triMin, triMax);
 			}
 		}
+
+		__global__ void Compute_AABBs(uint32_t numTriangles, const float3* vertices, const uint32_t* indexBuffer, AABB* outAABBs)
+		{
+			__shared__ AABB s_AABB[gmcCuda::BLOCK_SIZE_MORTON / 32];
+			const int triangleIndex = blockDim.x * blockIdx.x + threadIdx.x;
+			const int tIdx = threadIdx.x;
+			const int laneID = tIdx % 32;
+			const int warpID = tIdx / 32;
+			AABB localAABB;
+			// thread's AABB
+			if (triangleIndex < numTriangles)
+			{
+				uint32_t triangle[3] = { indexBuffer[triangleIndex * 3 + 0],  indexBuffer[triangleIndex * 3 + 1] , indexBuffer[triangleIndex * 3 + 2] };
+				float3 v0 = vertices[triangle[0]];
+				float3 v1 = vertices[triangle[1]];
+				float3 v2 = vertices[triangle[2]];
+
+				float3 triMin = MinFloat3(v0, v1, v2);
+				float3 triMax = MaxFloat3(v0, v1, v2);
+
+				localAABB = AABB(triMin, triMax);
+				outAABBs[triangleIndex] = localAABB;
+			}
+			else
+			{
+				localAABB = AABB();
+			}
+			__syncthreads();
+
+			// Warp's AABB
+			localAABB = WarpReducedAABB(localAABB);
+			if (laneID == 0)
+			{
+				s_AABB[warpID] = localAABB;
+			}
+			__syncthreads();
+
+			// Block's AABB
+			if (warpID == 0) // Only Block's First Warp Do
+			{
+				AABB blockAABB;
+
+				// this thread represents warp (less than num warps)
+				if (tIdx < blockDim.x / 32)
+				{
+					blockAABB = s_AABB[tIdx]; // fetch warpAABB
+				}
+				blockAABB = WarpReducedAABB(blockAABB);
+
+				// Update Global AABB
+				if (tIdx == 0)
+				{
+					atomicMinFloat(&outAABBs[numTriangles].min.x, blockAABB.min.x);
+					atomicMinFloat(&outAABBs[numTriangles].min.y, blockAABB.min.y);
+					atomicMinFloat(&outAABBs[numTriangles].min.z, blockAABB.min.z);
+
+					atomicMaxFloat(&outAABBs[numTriangles].max.x, blockAABB.max.x);
+					atomicMaxFloat(&outAABBs[numTriangles].max.y, blockAABB.max.y);
+					atomicMaxFloat(&outAABBs[numTriangles].max.z, blockAABB.max.z);					
+				}
+			}
+		}
+
 
 		__global__ void Update_Centroids(uint32_t numTriangles, const float3* vertices, const uint3* triangles, float* outCentroids)
 		{
@@ -133,6 +246,17 @@ namespace gmcCuda
 			if (tid >= size) return;
 			// normlize center with AABB's min,max. And * 1024
 			float3 coord = wholeAABB.normCoord(aabbs[tid].center()) * 1024.f;
+			uint3 uiCoord = make_uint3(coord);
+			codes[tid] = getMorton(clamp(uiCoord, make_uint3(0), make_uint3(1023)));
+			ids[tid] = tid;
+		}
+
+		__global__ void mortonKernel(AABB* aabbs, uint32_t* codes, uint32_t* ids, int size)
+		{
+			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
+			if (tid >= size) return;
+			// normlize center with AABB's min,max. And * 1024
+			float3 coord = aabbs[size].normCoord(aabbs[tid].center()) * 1024.f;
 			uint3 uiCoord = make_uint3(coord);
 			codes[tid] = getMorton(clamp(uiCoord, make_uint3(0), make_uint3(1023)));
 			ids[tid] = tid;
@@ -343,7 +467,7 @@ namespace gmcCuda
 			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
 			if (tid >= numTriangles) return;
 
-			uint32_t triID = triIDs[tid]; // tid:0 -> triID:4 => 4 is first from MortonCurve. for fetching original index buffer
+			uint32_t triID = triIDs[tid];
 			uint3 triangle = make_uint3(oldIndexBuffer[triID * 3 + 0], oldIndexBuffer[triID * 3 + 1], oldIndexBuffer[triID * 3 + 2]);
 			newIndexBuffer[tid * 3 + 0] = triangle.x;
 			newIndexBuffer[tid * 3 + 1] = triangle.y;
@@ -576,13 +700,14 @@ namespace gmcCuda
 		CUDA_CHECK(cudaMemcpy(m_dOldIndexBuffer, indices, sizeof(uint3) * m_numTriangles, cudaMemcpyHostToDevice));
 		CUDA_CHECK(cudaMemset(m_dNewIndexBuffer, 0xFFFF'FFFF, sizeof(uint3) * m_numTriangles));
 
+
 		// Fill AABB
 		dim3 gridDim = dim3(ROUND_UP_DIM(m_numTriangles, 1024), 1, 1);
-		gmcCuda::Kernels::Fill_AABBs << <gridDim, 1024 >> > (
+		/*gmcCuda::Kernels::Fill_AABBs << <gridDim, 1024 >> > (
 			m_numTriangles,
 			m_dPositions,
 			(uint3*)m_dOldIndexBuffer,
-			m_dAABBs);
+			m_dAABBs);*/
 		CUDA_SYNC_CHECK();
 	}
 
@@ -593,25 +718,37 @@ namespace gmcCuda
 		m_numTriangles = (numIndices / 3);
 
 		// Device Alloc
-		CUDA_CHECK(cudaMalloc(&m_dPositions, sizeof(float3) * numPositions));
-		CUDA_CHECK(cudaMalloc(&m_dOldIndexBuffer, sizeof(uint3) * m_numTriangles));
-		CUDA_CHECK(cudaMalloc(&m_dAABBs, sizeof(AABB*) * m_numTriangles));
+		//CUDA_CHECK(cudaMalloc(&m_dPositions, sizeof(float3) * numPositions));
+		CUDA_CHECK(cudaMalloc(&m_dNewIndexBuffer, sizeof(uint3) * m_numTriangles));
+		CUDA_CHECK(cudaMalloc(&m_dAABBs, sizeof(AABB) * (m_numTriangles + 1))); // last is Root AABB
 		CUDA_CHECK(cudaMalloc(&m_dMortons, sizeof(uint32_t*) * m_numTriangles));
 		CUDA_CHECK(cudaMalloc(&m_dTriIDs, sizeof(uint32_t*) * m_numTriangles));
 
 		// Map, Assign, Memcpy
 		m_dPositions = (float3*)mappedPositions;
 		m_dOldIndexBuffer = mappedIndices;
-		CUDA_CHECK(cudaMemset(m_dNewIndexBuffer, 0xFFFF'FFFF, sizeof(uint3) * m_numTriangles));
 
-		// Fill AABB
-		dim3 gridDim = dim3(ROUND_UP_DIM(m_numTriangles, 1024), 1, 1);
-		gmcCuda::Kernels::Fill_AABBs << <gridDim, 1024 >> > (
-			m_numTriangles,
-			m_dPositions,
-			(uint3*)m_dOldIndexBuffer,
-			m_dAABBs);
-		CUDA_SYNC_CHECK();
+		CUDA_CHECK(cudaMemset(m_dNewIndexBuffer,  0xFFFF'FFFF, sizeof(uint3) * m_numTriangles));
+
+		// Warming up
+		{
+			uint32_t blockSize = 256;
+			dim3 gridDim = dim3(ROUND_UP_DIM(m_numTriangles, blockSize), 1, 1);
+			gmcCuda::Kernels::Fill_AABBs << <gridDim, blockSize >> > (
+				m_numTriangles,
+				m_dPositions,
+				m_dOldIndexBuffer,
+				m_dAABBs);
+			CUDA_SYNC_CHECK();
+			m_rootAABB = thrust::reduce(
+				thrust::device,
+				m_dAABBs, m_dAABBs + m_numTriangles, m_rootAABB,
+				Kernels::MergeAABBFunctor());
+			CUDA_SYNC_CHECK();
+			Kernels::mortonKernel << <gridDim, blockSize >> > (
+				m_dAABBs, m_dMortons, m_dTriIDs, m_rootAABB, m_numTriangles);
+			CUDA_SYNC_CHECK();
+		}
 	}
 
 	void ClusterBuilder::Impl::BuildClusters()
@@ -638,43 +775,99 @@ namespace gmcCuda
 
 	uint32_t ClusterBuilder::Impl::BuildClusters_SimpleMorton(uint16_t clusterMaxSize, gmc::Cluster* outClusters)
 	{
-		uint32_t numClusters = 0;
+		//gmcCuda::GPUTimer gpuTimer(5, 0);
+		gmcCuda::GPUTimer gpuTimer(4, 0);
 		cudaError_t err;
-		// Root AABB
-		m_rootAABB = AABB();
-		m_rootAABB = thrust::reduce(
-			thrust::device,
-			m_dAABBs, m_dAABBs + m_numTriangles, m_rootAABB,
-			Kernels::MergeAABBFunctor());
+
+		// Fill AABB
+		uint32_t blockSize = 256;
+		dim3 gridDim = dim3(ROUND_UP_DIM(m_numTriangles, blockSize), 1, 1);
+
+		gpuTimer.RecordStart();
+		gmcCuda::Kernels::Compute_AABBs << <gridDim, blockSize >> > (
+			m_numTriangles,
+			m_dPositions,
+			m_dOldIndexBuffer,
+			m_dAABBs);
+		gpuTimer.RecordEnd();
 		CUDA_SYNC_CHECK();
 
 		// Compute morton codes.
-		Kernels::mortonKernel << <(m_numTriangles + 255) / 256, 256 >> > (
-			m_dAABBs, m_dMortons, m_dTriIDs, m_rootAABB, m_numTriangles);
+		gpuTimer.RecordStart();
+		Kernels::mortonKernel << <gridDim, blockSize >> > (
+		m_dAABBs, m_dMortons, m_dTriIDs, m_numTriangles);
+		gpuTimer.RecordEnd();
 		CUDA_SYNC_CHECK();
+
+		//gpuTimer.RecordStart();
+		//gmcCuda::Kernels::Fill_AABBs << <gridDim, blockSize >> > (
+		//	m_numTriangles,
+		//	m_dPositions,
+		//	m_dOldIndexBuffer,
+		//	m_dAABBs);
+		//gpuTimer.RecordEnd();
+		//CUDA_SYNC_CHECK();
+
+		//// Root AABB
+		//m_rootAABB = AABB();
+		//gpuTimer.RecordStart();
+		//m_rootAABB = thrust::reduce(
+		//	thrust::device,
+		//	m_dAABBs, m_dAABBs + m_numTriangles, m_rootAABB,
+		//	Kernels::MergeAABBFunctor());
+		//gpuTimer.RecordEnd();
+		//CUDA_SYNC_CHECK();
+
+		//// Compute morton codes.
+		//gpuTimer.RecordStart();
+		//Kernels::mortonKernel << <gridDim, blockSize >> > (
+		//	m_dAABBs, m_dMortons, m_dTriIDs, m_rootAABB, m_numTriangles);
+		//gpuTimer.RecordEnd();
+		//CUDA_SYNC_CHECK();
 
 		// Sort morton codes
+		gpuTimer.RecordStart();
 		thrust::stable_sort_by_key(thrust::device, m_dMortons, m_dMortons + m_numTriangles, m_dTriIDs);
+		gpuTimer.RecordEnd();
 		CUDA_SYNC_CHECK();
 
-		Kernels::Fill_ClusteredIndexBuffer_SimpleMorton<<<(m_numTriangles + 255) / 256, 256 >>> (m_dTriIDs, m_dOldIndexBuffer, m_dNewIndexBuffer, m_numTriangles);
+		gpuTimer.RecordStart();
+		Kernels::Fill_ClusteredIndexBuffer_SimpleMorton<<<gridDim, blockSize >>> (m_dTriIDs, m_dOldIndexBuffer, m_dNewIndexBuffer, m_numTriangles);
+		gpuTimer.RecordEnd();
 		CUDA_SYNC_CHECK();
 
-		if (cudaGetLastError() == cudaSuccess)
+		gpuTimer.printResults();
+
+		if (!m_bClustersCreated && cudaGetLastError() == cudaSuccess)
 		{
+			m_bClustersCreated = true;
 			// make numClusters multiple of clusterMaxSize
-			numClusters = (m_numTriangles + clusterMaxSize - 1) / clusterMaxSize;
+			m_numClusters = (m_numTriangles + clusterMaxSize - 1) / clusterMaxSize;
 
-			for (uint32_t i = 0; i < numClusters; ++i)
+			for (uint32_t i = 0; i < m_numClusters - 1; ++i)
 			{
 				outClusters[i] = gmc::Cluster
 				{
-					0, clusterMaxSize * i, 0xFFFF'FFFF, clusterMaxSize
+					0, clusterMaxSize * i, clusterMaxSize * 3u, clusterMaxSize
 				};
-
+			}
+			// last cluster's triangle count might be less than clusterMaxSize
+			uint16_t remainTriangles = m_numTriangles & (clusterMaxSize - 1);
+			if (remainTriangles == 0)
+			{
+				m_numClusters -= 1;
+			}
+			else
+			{
+				outClusters[m_numClusters - 1] = gmc::Cluster
+				{
+					0, clusterMaxSize * (m_numClusters - 1), clusterMaxSize * 3u, remainTriangles
+				};				
 			}
 		}
 
-		return numClusters;
+		//CUDA_CHECK(cudaMemcpy(m_dOldIndexBuffer, m_dNewIndexBuffer, sizeof(uint3) * m_numTriangles, cudaMemcpyDeviceToDevice));
+		std::swap(m_dOldIndexBuffer, m_dNewIndexBuffer);
+		return m_numClusters;
 	}
 }

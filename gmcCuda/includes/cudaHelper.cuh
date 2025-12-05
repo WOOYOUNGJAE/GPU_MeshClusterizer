@@ -5,6 +5,8 @@
 //#define CHECK_TIME_START(start,freq) QueryPerformanceFrequency((LARGE_INTEGER*)&freq); QueryPerformanceCounter((LARGE_INTEGER*)&start)
 //#define CHECK_TIME_END(start,end,freq,time) QueryPerformanceCounter((LARGE_INTEGER*)&end); time = (float)((float)(end - start) / (freq * 1.0e-3f))
 //
+#include <cuda_runtime.h>
+#include <iostream>
 
 #define CUDA_CHECK(call)                                                          \
     do {                                                                          \
@@ -36,3 +38,84 @@
 
 #define DEBUG_WATCH_CUDA_MEM(DST, SRC, TOTAL_SIZE) \
 cudaMemcpy((void*)DST, SRC, TOTAL_SIZE, cudaMemcpyDeviceToHost);
+
+namespace gmcCuda
+{
+#define GMC_MEASURE_MODE 0
+	class GPUTimer
+	{
+	public:
+        GPUTimer(uint32_t _numQueies, cudaStream_t _targetStream = 0) : numQueries(_numQueies), targetStream(_targetStream)
+        {
+#if GMC_MEASURE_MODE
+            startArr = new cudaEvent_t[numQueries];
+            endArr = new cudaEvent_t[numQueries];
+            resultArr = new float[numQueries];
+	        for (uint32_t i = 0; i < numQueries; ++i)
+	        {
+                resultArr[i] = -FLT_MAX;
+                CUDA_CHECK(cudaEventCreate(&startArr[i]));
+                CUDA_CHECK(cudaEventCreate(&endArr[i]));
+	        }
+#endif
+        }
+        ~GPUTimer()
+        {
+#if GMC_MEASURE_MODE
+            delete[] resultArr; resultArr = nullptr;
+            for (uint32_t i = 0; i < numQueries; ++i)
+            {
+                CUDA_CHECK(cudaEventDestroy(startArr[i]));
+                CUDA_CHECK(cudaEventDestroy(endArr[i]));
+            }
+            delete[] startArr; startArr = nullptr;
+            delete[] endArr; endArr = nullptr;
+#endif
+        }
+	public:
+        void RecordStart()
+        {
+#if GMC_MEASURE_MODE
+            CUDA_CHECK(cudaEventRecord(startArr[curQueryIndex], targetStream));
+#endif
+        }
+        void RecordEnd()
+        {
+#if GMC_MEASURE_MODE
+            CUDA_CHECK(cudaEventRecord(endArr[curQueryIndex++], targetStream));
+#endif
+        }
+        void collectResults()
+		{
+#if GMC_MEASURE_MODE
+            CUDA_CHECK(cudaStreamSynchronize(targetStream));
+            for (uint32_t i = 0; i < curQueryIndex; ++i)
+            {
+                cudaEventElapsedTime(resultArr + i, startArr[i], endArr[i]);
+            }
+            curQueryIndex = 0;
+#endif
+		}
+        void printResults()
+        {
+#if GMC_MEASURE_MODE
+            if (curQueryIndex > 0)
+                collectResults();
+
+            for (uint32_t i = 0; i < numQueries; ++i)
+            {
+                printf("GPU Timer %d : %f\n", i, resultArr[i]);
+            }
+#endif
+        }
+	public:
+        float* resultArr = nullptr;
+	private:
+        cudaStream_t targetStream;
+        cudaEvent_t* startArr = nullptr;
+        cudaEvent_t* endArr = nullptr;
+
+        uint32_t curQueryIndex = 0;
+        uint32_t numQueries = 0;
+	};
+}
