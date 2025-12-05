@@ -9,14 +9,24 @@ int main(int argc, char* argv[])
 
 	uint32_t numPositions = gltfLoader.m_vPositions.size();
 
+	std::vector<uint32_t> originalIndices(gltfLoader.m_indices);
+
 	gmcCuda::ClusterBuilder clusterBuilder;
-	clusterBuilder.Init_WithDeviceAllocation((float*)gltfLoader.m_vPositions.data(), numPositions, gltfLoader.m_indices.data(), gltfLoader.m_indices.size());
+	clusterBuilder.Init_MortonBased_CpuPointer((float*)gltfLoader.m_vPositions.data(), numPositions, gltfLoader.m_indices.data(), gltfLoader.m_indices.size());
 
 
 	uint32_t clusterMaxSize = 64;
 	std::vector<gmc::Cluster> clusters(gltfLoader.m_indices.size() / (clusterMaxSize * 2));
-	uint32_t numClusters = clusterBuilder.BuildClusters_SimpleMorton(clusterMaxSize, clusters.data());
+	uint32_t numClusters = clusterBuilder.BuildClusters_MortonBased(clusterMaxSize, clusters.data());
 
+	if (numClusters != 0xFFFF'FFFF && originalIndices != gltfLoader.m_indices)
+	{
+		printf("Clustering Success");
+	}
+	else
+	{
+		printf("Clustering Failed");
+	}
 
 	return 0;
 }

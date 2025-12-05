@@ -1,1 +1,1 @@
-// Dump File for project's c++ setting
+// Dump File for visual studio project's c++ setting

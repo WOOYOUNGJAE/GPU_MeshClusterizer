@@ -146,9 +146,6 @@
     <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h" />
     <ClInclude Include="includes\clusterBuilder.cuh" />
     <ClInclude Include="includes\cudaHelper.cuh" />
-    <ClInclude Include="includes\gmcCudaIncludes.cuh" />
-    <ClInclude Include="includes\nvUtils\Matrix.h" />
-    <ClInclude Include="includes\nvUtils\nvUtils.h" />
     <ClInclude Include="includes\nvUtils\Preprocessor.h" />
     <ClInclude Include="includes\nvUtils\vec_math.h" />
   </ItemGroup>

@@ -15,25 +15,16 @@
     <ClInclude Include="..\Includes\gmcCuda\gmcCuda.h">
       <Filter>public</Filter>
     </ClInclude>
-    <ClInclude Include="includes\gmcCudaIncludes.cuh">
-      <Filter>private</Filter>
-    </ClInclude>
     <ClInclude Include="includes\cudaHelper.cuh">
       <Filter>private</Filter>
     </ClInclude>
     <ClInclude Include="includes\clusterBuilder.cuh">
       <Filter>private</Filter>
     </ClInclude>
-    <ClInclude Include="includes\nvUtils\nvUtils.h">
-      <Filter>private\nvUtils</Filter>
-    </ClInclude>
     <ClInclude Include="includes\nvUtils\Preprocessor.h">
       <Filter>private\nvUtils</Filter>
     </ClInclude>
     <ClInclude Include="includes\nvUtils\vec_math.h">
-      <Filter>private\nvUtils</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\nvUtils\Matrix.h">
       <Filter>private\nvUtils</Filter>
     </ClInclude>
   </ItemGroup>
