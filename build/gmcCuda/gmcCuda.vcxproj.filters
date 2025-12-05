@@ -1,0 +1,64 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\Git\Myprojects\GPU_MeshClusterizer\gmcCuda\src\temp.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="D:\Git\Myprojects\GPU_MeshClusterizer\Includes\gmcCuda\gmcCuda.h">
+      <Filter>public headers\gmcCuda</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Git\Myprojects\GPU_MeshClusterizer\gmcCuda\includes\nvUtils\Preprocessor.h">
+      <Filter>private headers\nvUtils</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Git\Myprojects\GPU_MeshClusterizer\gmcCuda\includes\nvUtils\vec_math.h">
+      <Filter>private headers\nvUtils</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Git\Myprojects\GPU_MeshClusterizer\Includes\gmcDefines.h">
+      <Filter>public headers</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Git\Myprojects\GPU_MeshClusterizer\Includes\gmcMacros.h">
+      <Filter>public headers</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Git\Myprojects\GPU_MeshClusterizer\Includes\gmcStructs.h">
+      <Filter>public headers</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="..\..\gmcCuda\src\clusterBuilder.cu">
+      <Filter>src</Filter>
+    </CudaCompile>
+    <CudaCompile Include="..\..\gmcCuda\src\gmcCuda.cu">
+      <Filter>src</Filter>
+    </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Git\Myprojects\GPU_MeshClusterizer\gmcCuda\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="D:\Git\Myprojects\GPU_MeshClusterizer\gmcCuda\includes\clusterbuilder.cuh">
+      <Filter>private headers</Filter>
+    </None>
+    <None Include="D:\Git\Myprojects\GPU_MeshClusterizer\gmcCuda\includes\cudaHelper.cuh">
+      <Filter>private headers</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="private headers">
+      <UniqueIdentifier>{4471E57A-C4F3-316C-B781-C056D5E07A4C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="private headers\nvUtils">
+      <UniqueIdentifier>{F4CF801F-0FE7-3D9D-A1A3-ECFD9B037C9F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="public headers">
+      <UniqueIdentifier>{E9E87FC4-9CEF-3DA1-ACFD-A65B26D0ABEE}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="public headers\gmcCuda">
+      <UniqueIdentifier>{410E61FB-F5BB-30B8-8DC2-7675393A15FC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{5D3D5672-B681-39DF-90DA-12EAB3EEC30B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -1,5 +1,5 @@
 #include "gltfLoader.h"
-#include "gmcCuda/gmcCuda.h"
+#include <gmcCuda/gmcCuda.h>
 #include <gmcStructs.h>
 
 int main(int argc, char* argv[])
@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
 	std::vector<gmc::Cluster> clusters(gltfLoader.m_indices.size() / (clusterMaxSize * 2));
 	uint32_t numClusters = clusterBuilder.BuildClusters_MortonBased(clusterMaxSize, clusters.data());
 
-	if (numClusters != 0xFFFF'FFFF && originalIndices != gltfLoader.m_indices)
+	if (originalIndices != gltfLoader.m_indices)
 	{
 		printf("Clustering Success");
 	}
@@ -30,3 +30,4 @@ int main(int argc, char* argv[])
 
 	return 0;
 }
+	

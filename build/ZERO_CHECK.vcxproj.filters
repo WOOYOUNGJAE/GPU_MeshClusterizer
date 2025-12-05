@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="D:\Git\Myprojects\GPU_MeshClusterizer\build\CMakeFiles\b15a434384ee38791684e2925e9ae623\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{12CA6245-9E9C-30A7-928C-05597082A059}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
