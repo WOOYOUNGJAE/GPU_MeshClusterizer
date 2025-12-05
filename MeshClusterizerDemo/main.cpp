@@ -5,7 +5,8 @@
 int main(int argc, char* argv[])
 {
 	GltfLoader gltfLoader;
-	gltfLoader.LoadFromFile("D:\\Documents\\Blender\\Exports\\MocapGuy.gltf");
+	//gltfLoader.LoadFromFile(ASSET_PATH"/Avocado.glb");
+	gltfLoader.LoadFromFile(ASSET_PATH"/CesiumMan.gltf");
 
 	uint32_t numPositions = gltfLoader.m_vPositions.size();
 

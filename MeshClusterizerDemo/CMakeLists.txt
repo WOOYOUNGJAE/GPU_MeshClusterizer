@@ -1,8 +1,13 @@
+
 # 1. 소스 파일 지정 (헤더/소스 자동 검색)
 file(GLOB SOURCES "*.cpp" "*.h")
 
 # 2. 실행 파일 생성
 add_executable(MeshClusterizerDemo ${SOURCES})
+
+target_compile_definitions(MeshClusterizerDemo PRIVATE
+    ASSET_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}\"
+)
 
 # 3. 인클루드 경로 설정 (요청하신 경로 반영)
 target_include_directories(MeshClusterizerDemo PRIVATE
