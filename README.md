@@ -52,11 +52,8 @@ gmc는 bvh를 빠르게 빌드하는 LBVH의 아이디어를 기반으로 하였
 ![gmcCudaWorst1024](./assets/gmcCudaWorst1024.jpg)
 \- Dynamic Reclustering
 
-<!-- [![Morton Curve Based GPU Mesh Clusterizing](https://img.youtube.com/vi/Bw_Kcg8Qxz4/maxresdefault.jpg)](https://youtu.be/Bw_Kcg8Qxz4) -->
-
-[![Watch the video](https://img.youtube.com/vi/Bw_Kcg8Qxz4/0.jpg)](https://www.youtube.com/watch?v=Bw_Kcg8Qxz4)
-
-
+[![Morton Curve Based GPU Mesh Clusterizing](https://img.youtube.com/vi/Bw_Kcg8Qxz4/maxresdefault.jpg)](https://youtu.be/Bw_Kcg8Qxz4)
+\- Click to watch the video
 
 각각의 Cluster들을 BLAS Instance로 구성하고 리클러스터링 시점마다 BLAS를 리빌드한다.
 
