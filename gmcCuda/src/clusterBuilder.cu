@@ -21,6 +21,7 @@
 
 #include "gmcMacros.h"
 #include "gmcStructs.h"
+
 namespace gmcCuda
 {
 	class ScopedCPUTimer
@@ -159,7 +160,7 @@ namespace gmcCuda
 				float3 v1 = vertices[triangle[1]];
 				float3 v2 = vertices[triangle[2]];
 
-				float3 triMin = fminf(v0, fminf(v0, v1));
+				float3 triMin = fminf(v0, fminf(v1, v2));
 				float3 triMax = fmaxf(v0, fmaxf(v1, v2));
 				//float3 triMin = MinFloat3(v0, v1, v2);
 				//float3 triMax = MaxFloat3(v0, v1, v2);
@@ -173,7 +174,7 @@ namespace gmcCuda
 			}
 			__syncthreads();
 
-			// Warp's AABB
+			// Warp Scale AABB
 			localAABB = WarpReducedAABB(localAABB);
 			if (laneID == 0)
 			{
@@ -181,7 +182,7 @@ namespace gmcCuda
 			}
 			__syncthreads();
 
-			// Block's AABB
+			// Block Scale AABB
 			if (warpID == 0) // Only Block's First Warp Do
 			{
 				AABB blockAABB;
@@ -193,7 +194,7 @@ namespace gmcCuda
 				}
 				blockAABB = WarpReducedAABB(blockAABB);
 
-				// Update Global AABB
+				// Global Scale AABB
 				if (tIdx == 0)
 				{
 					atomicMinFloat(&outAABBs[numTriangles].min.x, blockAABB.min.x);
@@ -243,8 +244,6 @@ namespace gmcCuda
 			newIndexBuffer[tid * 3 + 1] = triangle.y;
 			newIndexBuffer[tid * 3 + 2] = triangle.z;
 		}
-
-
 	}
 
 	void ClusterBuilder::Impl_MortonBased::Init_CpuPointer(const float* positions, uint32_t numPositions, uint32_t* pIndices, uint32_t numIndices)
@@ -331,7 +330,7 @@ namespace gmcCuda
 	uint32_t ClusterBuilder::Impl_MortonBased::BuildClusters(uint16_t clusterMaxSize, gmc::Cluster* outClusters)
 	{
 		//gmcCuda::GPUTimer gpuTimer(5, 0);
-		gmcCuda::GPUTimer gpuTimer(4, 0);
+		helper::GPUTimer gpuTimer(4, 0);
 		cudaError_t err;
 
 		// Fill AABB
@@ -339,6 +338,7 @@ namespace gmcCuda
 		dim3 gridDim = dim3(ROUND_UP_DIM(m_numTriangles, blockSize), 1, 1);
 
 #if (1) // Improved Version
+		helper::debNvtxRangePush("gmc::AABB");
 		gpuTimer.RecordStart();
 		gmcCuda::Kernels::Compute_AABBs << <gridDim, blockSize >> > (
 			m_numTriangles,
@@ -347,14 +347,16 @@ namespace gmcCuda
 			m_dAABBs);
 		gpuTimer.RecordEnd();
 		CUDA_SYNC_CHECK();
+		helper::debNvtxRangePop();
 
 		// Compute morton codes.
+		helper::debNvtxRangePush("gmc::Morton");
 		gpuTimer.RecordStart();
 		Kernels::mortonKernel << <gridDim, blockSize >> > (
 		m_dAABBs, m_dMortons, m_dTriIDs, m_numTriangles);
 		gpuTimer.RecordEnd();
 		CUDA_SYNC_CHECK();
-
+		helper::debNvtxRangePop();
 #else // Old version with thrust reduction
 		gpuTimer.RecordStart();
 		gmcCuda::Kernels::Fill_AABBs << <gridDim, blockSize >> > (
@@ -384,15 +386,19 @@ namespace gmcCuda
 #endif	
 
 		// Sort morton codes
+		helper::debNvtxRangePush("gmc::ThrustSort");
 		gpuTimer.RecordStart();
 		thrust::stable_sort_by_key(thrust::device, m_dMortons, m_dMortons + m_numTriangles, m_dTriIDs);
 		gpuTimer.RecordEnd();
 		CUDA_SYNC_CHECK();
+		helper::debNvtxRangePop();
 
+		helper::debNvtxRangePush("gmc::UpdateTri");
 		gpuTimer.RecordStart();
 		Kernels::Fill_ClusteredIndexBuffer_SimpleMorton<<<gridDim, blockSize >>> (m_dTriIDs, m_dOldIndexBuffer, m_dNewIndexBuffer, m_numTriangles);
 		gpuTimer.RecordEnd();
 		CUDA_SYNC_CHECK();
+		helper::debNvtxRangePop();
 
 		gpuTimer.printResults();
 

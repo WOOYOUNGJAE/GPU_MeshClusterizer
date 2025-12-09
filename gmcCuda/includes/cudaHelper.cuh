@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include <nvtx3/nvToolsExtCuda.h>
 #include <iostream>
 
 #define CUDA_CHECK(call)                                                          \
@@ -37,9 +38,10 @@ cudaMemcpy((void*)DST, SRC, TOTAL_SIZE, cudaMemcpyDeviceToHost);
 #define CUDA_RELEASE(dPtr) \
     if (dPtr) {cudaFree(dPtr); (dPtr) = nullptr;}
 
-namespace gmcCuda
+namespace gmcCuda::helper
 {
 #define GMC_MEASURE_MODE 0
+#define NSIGHT_DEBUG 1
 	class GPUTimer
 	{
 	public:
@@ -116,4 +118,17 @@ namespace gmcCuda
         uint32_t curQueryIndex = 0;
         uint32_t numQueries = 0;
 	};
+
+    __host__ __device__ inline int debNvtxRangePush(const char* message)
+    {
+#if NSIGHT_DEBUG
+        return nvtxRangePush(message);
+#endif
+    }
+    __host__ __device__ inline int debNvtxRangePop()
+    {
+#if NSIGHT_DEBUG
+        return nvtxRangePop();
+#endif
+    }
 }
