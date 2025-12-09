@@ -54,7 +54,8 @@ gmc는 bvh를 빠르게 빌드하는 LBVH의 아이디어를 기반으로 하였
 
 <!-- [![Morton Curve Based GPU Mesh Clusterizing](https://img.youtube.com/vi/Bw_Kcg8Qxz4/maxresdefault.jpg)](https://youtu.be/Bw_Kcg8Qxz4) -->
 
-- <iframe width="640" height="360" src="https://www.youtube.com/embed/Bw_Kcg8Qxz4" frameborder="0" allowfullscreen></iframe>
+[![Watch the video](https://img.youtube.com/vi/Bw_Kcg8Qxz4/0.jpg)](https://www.youtube.com/watch?v=Bw_Kcg8Qxz4)
+
 
 
 각각의 Cluster들을 BLAS Instance로 구성하고 리클러스터링 시점마다 BLAS를 리빌드한다.
@@ -156,9 +157,8 @@ Block 단위 AABB끼리 Abosorption 연산을 하는데 이 때 커스텀 된 at
 #### Best Case (변형 X)
 ![ClusterQualityBestCase](./assets/ClusterQualityBestCase.png)
 ![OverlapHeatmapBestCase](./assets/OverlapHeatmapBestCase.png)
-<figcaption align="center">
-Meshoptimizer SAH Based (Left), My Morton Curve Based (Right)
-</figcaption>
+
+\-Meshoptimizer SAH Based (Left), My Morton Curve Based (Right)
 
 각각 클러스터의 시각화, 그리고 Nsight의 AABB Overlap Heatmap 이미지이다.\
 SAH 기반 meshoptimizer 방식이 더 타이트하고 겹치는 부분이 현저히 적다.
@@ -166,9 +166,8 @@ SAH 기반 meshoptimizer 방식이 더 타이트하고 겹치는 부분이 현�
 #### Worst Case (변형 최대)
 ![ClusterQualityWorstCase](./assets/ClusterQualityWorstCase.png)
 ![OverlapHeatmapWorstCase](./assets/OverlapHeatmapWorstCase.png)
-<figcaption align="center">
-Meshoptimizer SAH Based (Left), My Morton Curve Based (Right)
-</figcaption>
+
+\-Meshoptimizer SAH Based (Left), My Morton Curve Based (Right)
 
 왼쪽은 meshoptimizer로 로딩 시점에 한 번만 Clustering을 한 것이다. Mesh의 Vertex Buffer가 직접 변형되었기 때문에 Cluster의 AABB가 깨진 모습이다.\
 오른쪽은 gmc 라이브러리로 적절한 시점에 Reclustering을 한 모습이다. Nsight의 동일한 threshold의 Heatmap기준으로 겹침이 덜한 결과를 보인다.
